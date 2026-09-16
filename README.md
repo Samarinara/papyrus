@@ -21,6 +21,12 @@ npm run dev
 
 The English dictionary is bundled locally. Source and license: [static/dictionary](static/dictionary/README.md).
 
+## Motion
+
+Tiles deal in and spring into selection, connections draw one segment at a time, and both meters flow with gently moving liquid edges. Multipliers pop at thresholds; accepted words show their score calculation while the total counts up. Motion takes its rhythm from Balatro while retaining the paper-and-sage palette.
+
+Selection and scoring update immediately. Tile faces animate inside fixed hit areas, existing connections stay mounted during backtracking, and number tweens can be interrupted without losing points. The system follows `prefers-reduced-motion`, including changes made during a game.
+
 ## Verification
 
 ```sh

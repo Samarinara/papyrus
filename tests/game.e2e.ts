@@ -10,7 +10,10 @@ async function setup(page: Page) {
 		Math.random = () => (bag.indexOf(state.nextLetters.shift() ?? 'E') + 0.5) / bag.length;
 	}, letters);
 	await page.goto('/');
-	await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled();
+	// The bundled dictionary can take longer to load on a busy development machine.
+	await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled({
+		timeout: 15000
+	});
 }
 const tile = (page: Page, index: number) => page.locator(`[data-tile="${index}"]`);
 async function play(page: Page, path: number[]) {
@@ -52,6 +55,7 @@ test('keyboard, adjacency errors, backtracking, invalid words and replacement', 
 	await tile(page, 2).click();
 	await page.keyboard.press('Enter');
 	await expect(page.getByTestId('total')).toHaveText('5');
+	await expect(page.getByRole('img', { name: 'Game total: 5', exact: true })).toBeVisible();
 	await expect(tile(page, 0)).toContainText('E');
 	await expect(tile(page, 3)).toContainText('S');
 	await tile(page, 0).click();
@@ -115,7 +119,8 @@ test('mouse dragging selects a connected word', async ({ page }) => {
 		'aria-valuenow',
 		'3'
 	);
-	await expect(page.locator('polyline')).toHaveAttribute('points', /\S+ \S+ \S+/);
+	await expect(page.locator('.connections line')).toHaveCount(2);
+	await expect(page.locator('.connections line').last()).toHaveAttribute('x2', '250');
 });
 
 test('touch dragging and small-screen layout', async ({ browser }) => {
@@ -141,4 +146,50 @@ test('touch dragging and small-screen layout', async ({ browser }) => {
 		true
 	);
 	await context.close();
+});
+
+test('rapid selections settle correctly and backtracking removes only trailing links', async ({
+	page
+}) => {
+	await setup(page);
+	await page.evaluate(async () => {
+		for (const index of [0, 1, 2, 3]) {
+			document.querySelector<HTMLButtonElement>(`[data-tile="${index}"]`)!.click();
+			// Let the tween start, then interrupt it with the next selection.
+			await new Promise(requestAnimationFrame);
+			await new Promise(requestAnimationFrame);
+		}
+	});
+	await expect(page.getByTestId('word-score')).toHaveText('6');
+	await expect(page.getByTestId('multiplier')).toHaveText('2×');
+	await expect(page.locator('.connections line')).toHaveCount(3);
+	const firstLink = await page.locator('.connections line').first().elementHandle();
+	await tile(page, 3).click();
+	await expect(page.getByTestId('word-score')).toHaveText('5');
+	await expect(page.getByTestId('multiplier')).toHaveText('1×');
+	await expect(page.locator('.connections line')).toHaveCount(2);
+	expect(await firstLink!.evaluate((node) => node.isConnected)).toBe(true);
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('total')).toHaveText('5');
+	await expect(page.getByRole('img', { name: 'Game total: 5', exact: true })).toBeVisible();
+	await expect(page.locator('.award-points')).toHaveText('+5');
+	await expect(page.locator('.connections line')).toHaveCount(0);
+	await expect(page.getByTestId('word-score')).toHaveText('0');
+});
+
+test('reduced motion keeps scores immediate and responds to preference changes', async ({
+	page
+}) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await setup(page);
+	await play(page, [0, 1, 2, 3]);
+	await expect(page.getByTestId('total')).toHaveText('12');
+	expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.evaluate(() => {
+		document.querySelector<HTMLButtonElement>('[data-tile="0"]')!.click();
+	});
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await expect(page.getByTestId('word-score')).toHaveText('3');
+	expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
 });

@@ -276,14 +276,19 @@
 			<div class="scoreboard" aria-label="Scoreboard">
 				<div class="score-columns">
 					<span aria-label={`Active word score: ${score}`} data-testid="word-score"
-						><AnimatedNumber value={score} /></span
+						><AnimatedNumber value={score} label={`Active word score: ${score}`} /></span
 					>
 					<span aria-label={`Multiplier: ${multiplier}`} data-testid="multiplier"
-						><AnimatedNumber value={multiplier} suffix="×" strong /></span
+						><AnimatedNumber
+							value={multiplier}
+							suffix="×"
+							label={`Multiplier: ${multiplier}`}
+							strong
+						/></span
 					>
 				</div>
 				<div class="total" aria-label={`Game total: ${total}`} data-testid="total">
-					<AnimatedNumber value={total} strong />
+					<AnimatedNumber value={total} label={`Game total: ${total}`} strong />
 				</div>
 				{#if award}
 					{#key award.id}
@@ -329,7 +334,7 @@
 	{:else}
 		<div class="end-screen" aria-label="Game over">
 			<div class="final-score" aria-label={`Final score: ${total}`}>
-				<AnimatedNumber value={total} strong />
+				<AnimatedNumber value={total} label={`Final score: ${total}`} strong />
 			</div>
 			<p class="high-score">High score: {highScore}</p>
 			<button class="submit" onclick={restart}>Restart</button>

@@ -4,8 +4,9 @@
 	let {
 		value,
 		suffix = '',
+		label,
 		strong = false
-	}: { value: number; suffix?: string; strong?: boolean } = $props();
+	}: { value: number; suffix?: string; label?: string; strong?: boolean } = $props();
 	let displayed = $state(untrack(() => value));
 	let reduced = $state(true);
 	let element: HTMLSpanElement;
@@ -53,7 +54,12 @@
 	});
 </script>
 
-<span bind:this={element} class="animated-number" aria-hidden="true">{displayed}{suffix}</span>
+<span
+	bind:this={element}
+	class="animated-number"
+	role="img"
+	aria-label={label ?? `${value}${suffix}`}>{displayed}{suffix}</span
+>
 
 <style>
 	.animated-number {
