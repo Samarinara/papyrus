@@ -163,6 +163,37 @@ test('touch dragging and small-screen layout', async ({ browser }) => {
 	await context.close();
 });
 
+test('theme chooser previews, applies and remembers all five visual worlds', async ({ page }) => {
+	await setup(page);
+	const settings = page.getByRole('button', { name: 'Choose a visual theme' });
+	await settings.click();
+	const chooser = page.getByRole('dialog', { name: 'Visual themes' });
+	await expect(chooser).toBeVisible();
+	await expect(chooser.locator('.theme-option')).toHaveCount(5);
+
+	for (const [name, id] of [
+		['Candy Shop', 'candy'],
+		['Pixel Arcade', 'arcade'],
+		['Cosmic Drift', 'cosmos'],
+		['Secret Garden', 'garden'],
+		['Storybook', 'storybook']
+	] as const) {
+		const option = chooser.getByRole('button', { name: new RegExp(`^${name}`) });
+		await option.click();
+		await expect(page.locator('main.game')).toHaveAttribute('data-theme', id);
+		await expect(option).toHaveAttribute('aria-pressed', 'true');
+	}
+
+	await chooser.getByRole('button', { name: /^Cosmic Drift/ }).click();
+	await page.reload();
+	await expect(page.locator('main.game')).toHaveAttribute('data-theme', 'cosmos');
+	await expect(settings).toHaveAttribute('aria-expanded', 'false');
+	await settings.click();
+	await page.keyboard.press('Escape');
+	await expect(chooser).toBeHidden();
+	expect(await page.evaluate(() => localStorage.getItem('papyrus.theme'))).toBe('cosmos');
+});
+
 test('rapid selections settle correctly and backtracking removes only trailing links', async ({
 	page
 }) => {
