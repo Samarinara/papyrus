@@ -1,108 +1,277 @@
-@import 'tailwindcss';
-@plugin '@tailwindcss/forms';
-@plugin '@tailwindcss/typography';
-@import '@fontsource/fira-mono';
-
 :root {
-	--font-body:
-		Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
-		'Open Sans', 'Helvetica Neue', sans-serif;
-	--font-mono: 'Fira Mono', monospace;
-	--color-bg-0: rgb(202, 216, 228);
-	--color-bg-1: hsl(209, 36%, 86%);
-	--color-bg-2: hsl(224, 44%, 95%);
-	--color-theme-1: #ff3e00;
-	--color-theme-2: #4075a6;
-	--color-text: rgba(0, 0, 0, 0.7);
-	--column-width: 42rem;
-	--column-margin-top: 4rem;
-	font-family: var(--font-body);
-	color: var(--color-text);
+	font-family: Arial, Helvetica, sans-serif;
+	color: #302e29;
+	background: #f7f6f2;
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	font-variant-numeric: tabular-nums;
 }
-
+* {
+	box-sizing: border-box;
+}
 body {
-	min-height: 100vh;
 	margin: 0;
-	background-attachment: fixed;
-	background-color: var(--color-bg-1);
-	background-size: 100vw 100vh;
-	background-image:
-		radial-gradient(50% 50% at 50% 50%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 100%),
-		linear-gradient(180deg, var(--color-bg-0) 0%, var(--color-bg-1) 15%, var(--color-bg-2) 50%);
+	min-width: 320px;
 }
-
-h1,
-h2,
-p {
-	font-weight: 400;
+button {
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
 }
-
-p {
-	line-height: 1.5;
+button:disabled {
+	cursor: wait;
 }
-
-a {
-	color: var(--color-theme-1);
-	text-decoration: none;
+button:focus-visible {
+	outline: 3px solid #646e57;
+	outline-offset: 5px;
 }
-
-a:hover {
-	text-decoration: underline;
-}
-
-h1 {
-	font-size: 2rem;
-	text-align: center;
-}
-
-h2 {
-	font-size: 1rem;
-}
-
-pre {
-	font-size: 16px;
-	font-family: var(--font-mono);
-	background-color: rgba(255, 255, 255, 0.45);
-	border-radius: 3px;
-	box-shadow: 2px 2px 6px rgb(255 255 255 / 25%);
-	padding: 0.5em;
-	overflow-x: auto;
-	color: var(--color-text);
-}
-
-.text-column {
+.game {
+	min-height: 100svh;
 	display: flex;
-	max-width: 48rem;
-	flex: 0.6;
 	flex-direction: column;
-	justify-content: center;
+	padding: 28px clamp(16px, 5vw, 72px);
+	max-width: 1200px;
 	margin: 0 auto;
 }
-
-input,
-button {
-	font-size: inherit;
-	font-family: inherit;
-}
-
-button:focus:not(:focus-visible) {
-	outline: none;
-}
-
-@media (min-width: 720px) {
-	h1 {
-		font-size: 2.4rem;
-	}
-}
-
-.visually-hidden {
-	border: 0;
-	clip: rect(0 0 0 0);
-	height: auto;
-	margin: 0;
+.moves {
+	position: relative;
+	flex-shrink: 0;
+	height: 44px;
+	background: #e9e7e0;
+	border: 1px solid #d6d3c9;
+	border-radius: 4px;
 	overflow: hidden;
+}
+.moves-fill {
+	position: absolute;
+	inset: 0 auto 0 0;
+	background: #c7cebb;
+}
+.moves span {
+	position: relative;
+	display: grid;
+	height: 100%;
+	place-items: center;
+	font-size: 22px;
+	font-weight: 700;
+}
+.play-area {
+	display: grid;
+	grid-template-columns: minmax(0, 440px) minmax(120px, 220px);
+	gap: clamp(24px, 6vw, 80px);
+	align-items: center;
+	justify-content: center;
+	margin: auto 0;
+	padding-top: 40px;
+}
+.board-column {
+	min-width: 0;
+}
+.grid {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 0;
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+}
+.tile {
+	margin: 6px;
+	position: relative;
+	display: grid;
+	place-items: center;
+	aspect-ratio: 1;
+	border: 1px solid #cfc7b7;
+	border-bottom: 3px solid #bcb29e;
+	border-radius: 7px;
+	background: #ede4d1;
 	padding: 0;
+	isolation: isolate;
+}
+.tile.highlighted {
+	outline: 2px solid #7c826b;
+	outline-offset: 3px;
+}
+.tile.selected {
+	background: #cad2b9;
+	border-color: #a3af8c;
+	border-bottom-color: #8d9b76;
+}
+.letter {
+	font-size: clamp(24px, 4.2vw, 48px);
+	line-height: 1;
+	font-weight: 700;
+	z-index: 2;
+}
+.letter-score {
+	position: absolute;
+	top: 8px;
+	right: 9px;
+	font-size: 13px;
+	font-weight: 700;
+	z-index: 2;
+}
+.connections {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	overflow: visible;
+}
+.connections polyline {
+	fill: none;
+	stroke: #596749;
+	stroke-width: 4;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	opacity: 0.38;
+}
+.submit {
+	min-height: 44px;
+	min-width: 116px;
+	margin-top: 24px;
+	padding: 10px 24px;
+	border: 1px solid #383e30;
+	border-radius: 4px;
+	background: #414a37;
+	color: #fff;
+	font-size: 16px;
+}
+.submit:hover {
+	background: #535e46;
+}
+.submit:disabled {
+	opacity: 0.55;
+}
+.scoreboard {
+	align-self: center;
+	margin-bottom: 68px;
+	text-align: center;
+}
+.score-columns {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	border-bottom: 1px solid #cbc8bd;
+	padding-bottom: 24px;
+	font-size: clamp(25px, 3.4vw, 40px);
+}
+.score-columns span + span {
+	border-left: 1px solid #cbc8bd;
+}
+.total {
+	padding-top: 22px;
+	font-size: clamp(44px, 6vw, 72px);
+	font-weight: 700;
+	overflow-wrap: anywhere;
+}
+.feedback {
+	min-height: 24px;
+	margin: 24px 0;
+	text-align: center;
+	font-size: 14px;
+	color: #8d3f35;
+}
+.letter-track {
+	display: grid;
+	grid-template-columns: repeat(10, 1fr);
+	flex-shrink: 0;
+	border: 1px solid #d2cfc5;
+	border-radius: 4px;
+	overflow: hidden;
+	margin-top: auto;
+}
+.letter-track div {
+	display: grid;
+	place-items: center;
+	min-height: 52px;
+	font-size: 15px;
+	color: #767369;
+	background: #eeece5;
+}
+.letter-track div + div {
+	border-left: 1px solid #d2cfc5;
+}
+.letter-track .filled {
+	color: #303829;
+	background: #c7cebb;
+}
+.end-screen {
+	margin: auto;
+	text-align: center;
+}
+.final-score {
+	font-size: clamp(72px, 14vw, 128px);
+	font-weight: 700;
+}
+.high-score {
+	color: #6d6c61;
+}
+.sr-only {
 	position: absolute;
 	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
 	white-space: nowrap;
+	border: 0;
+}
+.invalid {
+	animation: shake 220ms ease-in-out;
+}
+@keyframes shake {
+	25%,
+	75% {
+		transform: translateX(-3px);
+	}
+	50% {
+		transform: translateX(3px);
+	}
+}
+@media (max-width: 600px) {
+	.game {
+		padding: 16px;
+	}
+	.play-area {
+		grid-template-columns: minmax(0, 1fr) 90px;
+		gap: 20px;
+		padding-top: 32px;
+	}
+	.grid {
+		gap: 0;
+	}
+	.tile {
+		margin: 3.5px;
+		border-radius: 4px;
+	}
+	.letter {
+		font-size: clamp(21px, 6vw, 34px);
+	}
+	.letter-score {
+		top: 4px;
+		right: 5px;
+		font-size: 10px;
+	}
+	.score-columns {
+		font-size: 23px;
+		padding-bottom: 16px;
+	}
+	.total {
+		font-size: 38px;
+		padding-top: 16px;
+	}
+	.letter-track div {
+		min-height: 44px;
+		font-size: 12px;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.invalid {
+		animation: none;
+		border-color: #b44c40;
+	}
 }
