@@ -1,42 +1,33 @@
-# sv
+# Papyrus
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A minimal Svelte word game: link adjacent letters, submit English words, and score as much as possible in ten moves.
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
+## Development
 
 ```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-bun x sv@0.17.0 create --template demo --types ts --add prettier eslint vitest="usages:unit,component" playwright tailwindcss="plugins:typography,forms" sveltekit-adapter="adapter:vercel" --install bun papyrus
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+## Rules
 
-To create a production version of your app:
+- Use the mouse, touch dragging, or arrow keys and Space to select letters. Enter or Submit submits a word.
+- All eight neighboring tiles are connected. Selecting an already selected tile removes it and all following tiles.
+- Words must contain 2–16 letters and cannot repeat within a round. Rejected submissions do not consume moves.
+- Letter values and random letter frequencies use the standard English Scrabble distribution, without blanks.
+- Length multipliers: 1–3 letters = 1×, 4–6 = 2×, 7–8 = 4×, 9–16 = 10×.
+- Accepted words add letter score × multiplier to the total and replace their tiles.
+- After ten accepted words, the final score and restart button appear. The high score persists in localStorage when available.
+
+The English dictionary is bundled locally. Source and license: [static/dictionary](static/dictionary/README.md).
+
+## Verification
 
 ```sh
+npm run check
+npm run lint
+npm run test:unit -- --run
+npx playwright install chromium
+npx playwright test
 npm run build
 ```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.

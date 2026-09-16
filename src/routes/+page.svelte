@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { base } from '$app/paths';
 	import {
 		createBoard,
@@ -22,9 +23,9 @@
 	let ready = $state(false);
 	let message = $state('');
 	let invalidTile = $state<number | null>(null);
-	let grid: HTMLDivElement;
+	let grid = $state<HTMLDivElement>();
 	let dictionary = new Set<string>();
-	let used = new Set<string>();
+	let used = new SvelteSet<string>();
 	let pointer: number | null = null;
 	let lastHit: number | null = null;
 	let errorTimer: ReturnType<typeof setTimeout>;
@@ -106,7 +107,7 @@
 		cursor = null;
 		moves = 10;
 		total = 0;
-		used = new Set();
+		used = new SvelteSet();
 		message = '';
 		pointer = null;
 		lastHit = null;
@@ -114,12 +115,17 @@
 
 	function keydown(event: KeyboardEvent) {
 		if (moves === 0 || !ready || event.altKey || event.ctrlKey || event.metaKey) return;
-		if (event.target instanceof HTMLButtonElement && !event.target.hasAttribute('data-tile'))
+		if (
+			event.target instanceof HTMLButtonElement &&
+			!event.target.hasAttribute('data-tile') &&
+			!event.key.startsWith('Arrow')
+		)
 			return;
 		if (event.key.startsWith('Arrow')) {
 			event.preventDefault();
 			if (cursor === null) {
 				cursor = 0;
+				grid?.querySelector<HTMLButtonElement>(`[data-tile="0"]`)?.focus();
 				return;
 			}
 			const row = Math.floor(cursor / 4),
@@ -128,6 +134,7 @@
 			if (event.key === 'ArrowRight') cursor = row * 4 + Math.min(3, col + 1);
 			if (event.key === 'ArrowUp') cursor = Math.max(0, row - 1) * 4 + col;
 			if (event.key === 'ArrowDown') cursor = Math.min(3, row + 1) * 4 + col;
+			grid?.querySelector<HTMLButtonElement>(`[data-tile="${cursor}"]`)?.focus();
 		} else if (event.key === ' ') {
 			event.preventDefault();
 			if (!event.repeat) select(cursor ?? 0);
@@ -141,7 +148,7 @@
 		if (event.button !== 0 || pointer !== null) return;
 		event.preventDefault();
 		// Capture on the grid, then hit-test so touch and mouse share the same drag behavior.
-		grid.setPointerCapture(event.pointerId);
+		grid?.setPointerCapture(event.pointerId);
 		pointer = event.pointerId;
 		lastHit = index;
 		select(index);
@@ -204,7 +211,7 @@
 					onpointermove={pointermove}
 					onlostpointercapture={endDrag}
 				>
-					{#each board as letter, index}
+					{#each board as letter, index (index)}
 						<button
 							class="tile"
 							class:selected={path.includes(index)}
@@ -263,7 +270,7 @@
 			aria-valuenow={path.length}
 			aria-valuetext={`${path.length} letters, ${multiplier} times multiplier`}
 		>
-			{#each Array.from({ length: 10 }, (_, index) => index + 1) as length}
+			{#each Array.from({ length: 10 }, (_, index) => index + 1) as length (length)}
 				<div class:filled={path.length >= length}>{multiplierFor(length)}×</div>
 			{/each}
 		</div>
