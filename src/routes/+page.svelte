@@ -29,15 +29,32 @@
 	let dealOrder = $state(Array.from({ length: 16 }, (_, index) => index));
 	let award = $state<{ id: number; points: number; base: number; multiplier: number } | null>(null);
 	let rejectionCount = $state(0);
+	let movesBarScale = $state(1);
+	let trackBarScale = $state(1);
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
 	let pointer: number | null = null;
 	let lastHit: number | null = null;
 	let errorTimer: ReturnType<typeof setTimeout>;
+	let movesBarTimer: ReturnType<typeof setTimeout>;
+	let trackBarTimer: ReturnType<typeof setTimeout>;
 	const score = $derived(scoreFor(board, path));
 	const multiplier = $derived(multiplierFor(path.length));
 	const word = $derived(wordFor(board, path));
 	const connections = $derived(path.slice(1).map((to, index) => ({ from: path[index], to })));
+
+	function pulseBar(type: 'moves' | 'track') {
+		const setScale =
+			type === 'moves'
+				? (value: number) => (movesBarScale = value)
+				: (value: number) => (trackBarScale = value);
+		const timer = type === 'moves' ? movesBarTimer : trackBarTimer;
+		clearTimeout(timer);
+		setScale(1.025);
+		const nextTimer = setTimeout(() => setScale(1), 180);
+		if (type === 'moves') movesBarTimer = nextTimer;
+		else trackBarTimer = nextTimer;
+	}
 
 	onMount(() => {
 		board = createBoard();
@@ -78,6 +95,7 @@
 			return;
 		}
 		path = next;
+		pulseBar('track');
 		message = '';
 	}
 
@@ -97,6 +115,8 @@
 		board = board.map((letter, index) => (path.includes(index) ? randomLetter() : letter));
 		path = [];
 		moves -= 1;
+		pulseBar('moves');
+		pulseBar('track');
 		message = '';
 		if (total > highScore) {
 			highScore = total;
@@ -210,7 +230,11 @@
 			aria-valuemax="10"
 			aria-valuenow={moves}
 		>
-			<div class="moves-fill liquid-fill" style:width={`${moves * 10}%`}></div>
+			<div
+				class="moves-fill bar-fill"
+				style:width={`${moves * 10}%`}
+				style:transform={`scaleX(${movesBarScale})`}
+			></div>
 			<span class="moves-count"><AnimatedNumber value={moves} /></span>
 		</div>
 
@@ -317,8 +341,9 @@
 			aria-valuetext={`${path.length} letters, ${multiplier} times multiplier`}
 		>
 			<div
-				class="track-fill liquid-fill"
+				class="track-fill bar-fill"
 				style:width={`${Math.min(path.length / 10, 1) * 100}%`}
+				style:transform={`scaleX(${trackBarScale})`}
 				aria-hidden="true"
 			></div>
 			{#each Array.from({ length: 10 }, (_, index) => index + 1) as length (length)}
