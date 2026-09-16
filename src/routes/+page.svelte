@@ -32,6 +32,8 @@
 	let rejectionCount = $state(0);
 	let movesBarScale = $state(1);
 	let trackBarScale = $state(1);
+	let theme = $state<ThemeId>('storybook');
+	let themeMenuOpen = $state(false);
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
 	let dealer = new LetterDealer();
@@ -40,6 +42,40 @@
 	let errorTimer: ReturnType<typeof setTimeout>;
 	let movesBarTimer: ReturnType<typeof setTimeout>;
 	let trackBarTimer: ReturnType<typeof setTimeout>;
+	const THEME_KEY = 'papyrus.theme';
+	const themes = [
+		{
+			id: 'storybook',
+			name: 'Storybook',
+			description: 'Cut paper, ink and warm, wobbly type',
+			preview: ['P', 'A', 'P']
+		},
+		{
+			id: 'candy',
+			name: 'Candy Shop',
+			description: 'Glossy sweets, sprinkles and sticker letters',
+			preview: ['Y', 'U', 'M']
+		},
+		{
+			id: 'arcade',
+			name: 'Pixel Arcade',
+			description: 'Chunky pixels, scanlines and electric combos',
+			preview: ['1', 'U', 'P']
+		},
+		{
+			id: 'cosmos',
+			name: 'Cosmic Drift',
+			description: 'Floating glass glyphs in a star field',
+			preview: ['O', 'R', 'B']
+		},
+		{
+			id: 'garden',
+			name: 'Secret Garden',
+			description: 'Pressed flowers, clay tokens and soft type',
+			preview: ['B', 'L', 'M']
+		}
+	] as const;
+	type ThemeId = (typeof themes)[number]['id'];
 	const score = $derived(scoreFor(board, path));
 	const multiplier = $derived(multiplierFor(path.length));
 	const word = $derived(wordFor(board, path));
@@ -63,6 +99,8 @@
 		try {
 			const stored = Number(localStorage.getItem(HIGH_SCORE_KEY));
 			if (Number.isSafeInteger(stored) && stored >= 0) highScore = stored;
+			const storedTheme = localStorage.getItem(THEME_KEY);
+			if (themes.some(({ id }) => id === storedTheme)) theme = storedTheme as ThemeId;
 		} catch {
 			/* Storage may be unavailable; the game still works. */
 		}
@@ -85,6 +123,15 @@
 			clearTimeout(errorTimer);
 		};
 	});
+
+	function chooseTheme(nextTheme: ThemeId) {
+		theme = nextTheme;
+		try {
+			localStorage.setItem(THEME_KEY, theme);
+		} catch {
+			/* Keep the theme for this session when storage is unavailable. */
+		}
+	}
 
 	function select(index: number) {
 		if (!ready || moves === 0) return;
@@ -220,9 +267,20 @@
 	/>
 </svelte:head>
 
-<svelte:window onkeydown={keydown} onpointerup={endDrag} onpointercancel={endDrag} />
+<svelte:window
+	onkeydown={(event) => {
+		if (event.key === 'Escape' && themeMenuOpen) {
+			event.preventDefault();
+			themeMenuOpen = false;
+			return;
+		}
+		keydown(event);
+	}}
+	onpointerup={endDrag}
+	onpointercancel={endDrag}
+/>
 
-<main class="game" aria-label="Papyrus word game">
+<main class="game" data-theme={theme} aria-label="Papyrus word game">
 	{#if moves > 0}
 		<div
 			class="moves"
@@ -295,9 +353,74 @@
 						{/each}
 					</svg>
 				</div>
-				<button class="submit" class:primed={path.length >= 2} onclick={submit} disabled={!ready}
-					>{ready ? 'Submit' : 'Loading…'}</button
-				>
+				<div class="game-actions">
+					<button class="submit" class:primed={path.length >= 2} onclick={submit} disabled={!ready}
+						>{ready ? 'Submit' : 'Loading…'}</button
+					>
+					<div class="theme-settings">
+						<button
+							class="settings-button"
+							type="button"
+							aria-label="Choose a visual theme"
+							aria-expanded={themeMenuOpen}
+							aria-controls="theme-picker"
+							onclick={() => (themeMenuOpen = !themeMenuOpen)}
+						>
+							<svg viewBox="0 0 24 24" aria-hidden="true">
+								<path d="M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25Z" />
+								<path
+									d="M19.1 13.9a7.6 7.6 0 0 0 .05-3.57l2-1.5-2-3.45-2.48 1a7.7 7.7 0 0 0-3.1-1.8L13.25 2h-4l-.33 2.6a7.7 7.7 0 0 0-3.1 1.79l-2.47-1-2 3.45 2.03 1.54a7.6 7.6 0 0 0 0 3.55l-2.03 1.54 2 3.45 2.47-1a7.7 7.7 0 0 0 3.1 1.79l.33 2.6h4l.33-2.6a7.7 7.7 0 0 0 3.1-1.8l2.47 1 2-3.44-2.05-1.56Z"
+								/>
+							</svg>
+						</button>
+
+						{#if themeMenuOpen}
+							<div
+								id="theme-picker"
+								class="theme-picker"
+								role="dialog"
+								aria-modal="false"
+								aria-label="Visual themes"
+							>
+								<div class="theme-picker-heading">
+									<div>
+										<p class="theme-eyebrow">Make it yours</p>
+										<h2>Choose a world</h2>
+									</div>
+									<button
+										class="theme-close"
+										type="button"
+										aria-label="Close theme chooser"
+										onclick={() => (themeMenuOpen = false)}>×</button
+									>
+								</div>
+								<div class="theme-options">
+									{#each themes as option (option.id)}
+										<button
+											type="button"
+											class="theme-option"
+											class:active={theme === option.id}
+											data-preview-theme={option.id}
+											aria-pressed={theme === option.id}
+											onclick={() => chooseTheme(option.id)}
+										>
+											<span class="theme-preview" aria-hidden="true">
+												{#each option.preview as letter, index (`${letter}-${index}`)}<span
+														>{letter}</span
+													>{/each}
+											</span>
+											<span class="theme-copy">
+												<strong>{option.name}</strong>
+												<small>{option.description}</small>
+											</span>
+											<span class="theme-check" aria-hidden="true">✓</span>
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
 			</div>
 
 			<div class="scoreboard" aria-label="Scoreboard">
