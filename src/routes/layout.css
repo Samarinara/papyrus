@@ -326,44 +326,19 @@ button:focus-visible {
 	stroke-dashoffset: 0;
 	animation: draw-link 130ms var(--settle) both;
 }
-.liquid-fill {
+.bar-fill {
 	position: absolute;
 	inset: 0 auto 0 0;
-	background: linear-gradient(180deg, #d4dbc8, #bdc9ae 65%, #b1c09f);
+	background: #bdc9ae;
+	transform-origin: left center;
 	transition:
 		width 380ms cubic-bezier(0.2, 0.85, 0.25, 1),
+		transform 180ms cubic-bezier(0.2, 0.85, 0.25, 1),
 		background 200ms;
 	border-radius: 0 8px 8px 0;
 }
-.liquid-fill::before,
-.liquid-fill::after {
-	content: '';
-	position: absolute;
-	right: -7px;
-	top: -18px;
-	width: 20px;
-	height: 88px;
-	border-radius: 46% 54% 42% 58%;
-	background: #c4d0b7;
-	animation: liquid-edge 2.7s ease-in-out infinite alternate;
-}
-.liquid-fill::after {
-	right: -3px;
-	background: #d5dec9;
-	opacity: 0.65;
-	animation-delay: -1.4s;
-	animation-direction: alternate-reverse;
-}
-.liquid-fill[style*='width: 0%']::before,
-.liquid-fill[style*='width: 0%']::after {
-	display: none;
-}
-.moves.low .liquid-fill {
-	background: linear-gradient(180deg, #e4cfaa, #cfb283);
-}
-.moves.low .liquid-fill::before,
-.moves.low .liquid-fill::after {
-	background: #ddc396;
+.moves.low .bar-fill {
+	background: #cfb283;
 }
 .track-fill {
 	z-index: -1;
@@ -498,14 +473,6 @@ button:focus-visible {
 	to {
 		stroke-dashoffset: 0;
 		opacity: 0.38;
-	}
-}
-@keyframes liquid-edge {
-	from {
-		transform: translateY(-7px) rotate(-7deg) scaleX(0.75);
-	}
-	to {
-		transform: translateY(5px) rotate(9deg) scaleX(1.1);
 	}
 }
 @keyframes award-rise {
