@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { base } from '$app/paths';
+	import AnimatedNumber from '$lib/AnimatedNumber.svelte';
 	import {
 		createBoard,
 		HIGH_SCORE_KEY,
@@ -24,6 +25,10 @@
 	let message = $state('');
 	let invalidTile = $state<number | null>(null);
 	let grid = $state<HTMLDivElement>();
+	let tileVersions = $state(Array<number>(16).fill(0));
+	let dealOrder = $state(Array.from({ length: 16 }, (_, index) => index));
+	let award = $state<{ id: number; points: number; base: number; multiplier: number } | null>(null);
+	let rejectionCount = $state(0);
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
 	let pointer: number | null = null;
@@ -32,9 +37,7 @@
 	const score = $derived(scoreFor(board, path));
 	const multiplier = $derived(multiplierFor(path.length));
 	const word = $derived(wordFor(board, path));
-	const points = $derived(
-		path.map((index) => `${(index % 4) * 100 + 50},${Math.floor(index / 4) * 100 + 50}`).join(' ')
-	);
+	const connections = $derived(path.slice(1).map((to, index) => ({ from: path[index], to })));
 
 	onMount(() => {
 		board = createBoard();
@@ -83,10 +86,14 @@
 		const rejection = rejectionFor(word, dictionary, used);
 		if (rejection) {
 			message = rejection;
+			rejectionCount += 1;
 			return;
 		}
 		used.add(word.toLowerCase());
-		total += score * multiplier;
+		award = { id: (award?.id ?? 0) + 1, points: score * multiplier, base: score, multiplier };
+		total += award.points;
+		dealOrder = board.map((_, index) => Math.max(0, path.indexOf(index)));
+		tileVersions = tileVersions.map((version, index) => version + Number(path.includes(index)));
 		board = board.map((letter, index) => (path.includes(index) ? randomLetter() : letter));
 		path = [];
 		moves -= 1;
@@ -102,6 +109,11 @@
 	}
 
 	function restart() {
+		award = null;
+		invalidTile = null;
+		clearTimeout(errorTimer);
+		dealOrder = Array.from({ length: 16 }, (_, index) => index);
+		tileVersions = tileVersions.map((version) => version + 1);
 		board = createBoard();
 		path = [];
 		cursor = null;
@@ -191,14 +203,15 @@
 	{#if moves > 0}
 		<div
 			class="moves"
+			class:low={moves <= 3}
 			role="meter"
 			aria-label="Moves remaining"
 			aria-valuemin="0"
 			aria-valuemax="10"
 			aria-valuenow={moves}
 		>
-			<div class="moves-fill" style:width={`${moves * 10}%`}></div>
-			<span>{moves}</span>
+			<div class="moves-fill liquid-fill" style:width={`${moves * 10}%`}></div>
+			<span class="moves-count"><AnimatedNumber value={moves} /></span>
 		</div>
 
 		<div class="play-area">
@@ -217,6 +230,8 @@
 							class:selected={path.includes(index)}
 							class:highlighted={cursor === index}
 							class:invalid={invalidTile === index}
+							style:--tilt={`${(((index * 7) % 5) - 2) * 0.7}deg`}
+							style:--deal-delay={`${dealOrder[index] * 14}ms`}
 							data-tile={index}
 							aria-label={`${letter}, ${LETTER_SCORES[letter]} points, row ${Math.floor(index / 4) + 1}, column ${(index % 4) + 1}`}
 							aria-pressed={path.includes(index)}
@@ -233,31 +248,57 @@
 								if (event.detail === 0) select(index);
 							}}
 						>
-							<span class="letter">{letter}</span>
-							<span class="letter-score">{LETTER_SCORES[letter]}</span>
+							{#key tileVersions[index]}
+								<span class="tile-face">
+									<span class="letter">{letter}</span>
+									<span class="letter-score">{LETTER_SCORES[letter]}</span>
+								</span>
+							{/key}
 						</button>
 					{/each}
 					<svg class="connections" viewBox="0 0 400 400" aria-hidden="true">
-						<polyline {points} />
+						{#each connections as { from, to } (`${from}-${to}`)}
+							<line
+								x1={(from % 4) * 100 + 50}
+								y1={Math.floor(from / 4) * 100 + 50}
+								x2={(to % 4) * 100 + 50}
+								y2={Math.floor(to / 4) * 100 + 50}
+								pathLength="1"
+							/>
+						{/each}
 					</svg>
 				</div>
-				<button class="submit" onclick={submit} disabled={!ready}
+				<button class="submit" class:primed={path.length >= 2} onclick={submit} disabled={!ready}
 					>{ready ? 'Submit' : 'Loading…'}</button
 				>
 			</div>
 
 			<div class="scoreboard" aria-label="Scoreboard">
 				<div class="score-columns">
-					<span aria-label={`Active word score: ${score}`} data-testid="word-score">{score}</span>
+					<span aria-label={`Active word score: ${score}`} data-testid="word-score"
+						><AnimatedNumber value={score} /></span
+					>
 					<span aria-label={`Multiplier: ${multiplier}`} data-testid="multiplier"
-						>{multiplier}×</span
+						><AnimatedNumber value={multiplier} suffix="×" strong /></span
 					>
 				</div>
-				<div class="total" aria-label={`Game total: ${total}`} data-testid="total">{total}</div>
+				<div class="total" aria-label={`Game total: ${total}`} data-testid="total">
+					<AnimatedNumber value={total} strong />
+				</div>
+				{#if award}
+					{#key award.id}
+						<div class="score-award" aria-hidden="true">
+							<span class="award-formula">{award.base} × {award.multiplier}</span>
+							<span class="award-points">+{award.points}</span>
+						</div>
+					{/key}
+				{/if}
 			</div>
 		</div>
 
-		<p class="feedback" role="status">{message}</p>
+		<div class="feedback" role="status">
+			{#key rejectionCount}<p class:rejected={message !== ''}>{message}</p>{/key}
+		</div>
 		<span class="sr-only" aria-live="polite"
 			>{word ? `${word}, ${path.length} letters` : 'No letters selected'}</span
 		>
@@ -270,13 +311,26 @@
 			aria-valuenow={path.length}
 			aria-valuetext={`${path.length} letters, ${multiplier} times multiplier`}
 		>
+			<div
+				class="track-fill liquid-fill"
+				style:width={`${Math.min(path.length / 10, 1) * 100}%`}
+				aria-hidden="true"
+			></div>
 			{#each Array.from({ length: 10 }, (_, index) => index + 1) as length (length)}
-				<div class:filled={path.length >= length}>{multiplierFor(length)}×</div>
+				<div
+					class="track-step"
+					class:filled={path.length >= length}
+					class:milestone={[4, 7, 9].includes(length)}
+				>
+					<span>{multiplierFor(length)}×</span>
+				</div>
 			{/each}
 		</div>
 	{:else}
 		<div class="end-screen" aria-label="Game over">
-			<div class="final-score" aria-label={`Final score: ${total}`}>{total}</div>
+			<div class="final-score" aria-label={`Final score: ${total}`}>
+				<AnimatedNumber value={total} strong />
+			</div>
 			<p class="high-score">High score: {highScore}</p>
 			<button class="submit" onclick={restart}>Restart</button>
 		</div>
