@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const letters = 'CATSTERNOUSELINEA';
+const letters = 'CATSTERNOUSELINE';
 async function setup(page: Page) {
 	await page.addInitScript((initial) => {
 		const bag =
@@ -120,6 +120,7 @@ test('mouse dragging selects a connected word', async ({ page }) => {
 
 test('touch dragging and small-screen layout', async ({ browser }) => {
 	const context = await browser.newContext({
+		baseURL: 'http://localhost:4173',
 		viewport: { width: 375, height: 667 },
 		hasTouch: true,
 		isMobile: true
