@@ -18,9 +18,6 @@ const tile = (page: Page, index: number) => page.locator(`[data-tile="${index}"]
 async function play(page: Page, path: number[]) {
 	for (const index of path) await tile(page, index).click();
 	await page.keyboard.press('Enter');
-	await page.waitForFunction(() => !document.querySelector('.scoreboard.scoring'), null, {
-		timeout: 5000
-	});
 }
 
 async function findPlayablePath(
@@ -103,7 +100,6 @@ test('keyboard, adjacency errors, backtracking, invalid words and replacement', 
 });
 
 test('ten accepted words, final score, restart and stored high score', async ({ page }) => {
-	test.setTimeout(60_000);
 	await setup(page);
 	const used: string[] = [];
 	for (let move = 0; move < 10; move += 1) {
