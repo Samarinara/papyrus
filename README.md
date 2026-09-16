@@ -1,6 +1,17 @@
 # Papyrus
 
-A minimal Svelte word game: link adjacent letters, submit English words, and score as much as possible in ten moves.
+Papyrus is a ten-move word game about finding the best route through a 4×4 board. Draw a path through touching letters, submit the word, and decide whether to play it safe or hold out for a bigger multiplier.
+
+Every accepted word changes the board. A short word can keep a useful cluster intact; a long word can clear the way to a much better score. When the tenth word is in, the board is done and the high-score chase starts again.
+
+## How to play
+
+- Drag through adjacent letters, including diagonals, to build a word. You can also use the arrow keys and Space.
+- Submit a valid word with Enter or the Submit button. Words must be 2–16 letters long and cannot be repeated in the same round.
+- Score the Scrabble value of your letters, multiplied by word length: 1× for 2–3 letters, 2× for 4–6, 4× for 7–8, and 10× for 9–16.
+- Accepted words use up their tiles and refill them with new letters. Rejected submissions do not cost a move.
+
+The game uses a broad local English word list, so uncommon and archaic words may be accepted. Your high score is saved in `localStorage` when the browser allows it.
 
 ## Development
 
@@ -9,23 +20,11 @@ npm install
 npm run dev
 ```
 
-## Rules
+## Project details
 
-- Use the mouse, touch dragging, or arrow keys and Space to select letters. Enter or Submit submits a word.
-- All eight neighboring tiles are connected. Selecting an already selected tile removes it and all following tiles.
-- Words must contain 2–16 letters and cannot repeat within a round. Rejected submissions do not consume moves.
-- Letter values and random letter frequencies use the standard English Scrabble distribution, without blanks.
-- Length multipliers: 1–3 letters = 1×, 4–6 = 2×, 7–8 = 4×, 9–16 = 10×.
-- Accepted words add letter score × multiplier to the total and replace their tiles.
-- After ten accepted words, the final score and restart button appear. The high score persists in localStorage when available.
+Papyrus is built with Svelte and designed for mouse, touch, and keyboard play. Tile selection, connections, score changes, and the board refill have immediate visual feedback, with support for `prefers-reduced-motion`.
 
-The English dictionary is bundled locally. Source and license: [static/dictionary](static/dictionary/README.md).
-
-## Motion
-
-Tiles deal in and spring into selection, connections draw one segment at a time, and both meters flow with gently moving liquid edges. Multipliers pop at thresholds; accepted words show their score calculation while the total counts up. Motion takes its rhythm from Balatro while retaining the paper-and-sage palette.
-
-Selection and scoring update immediately. Tile faces animate inside fixed hit areas, existing connections stay mounted during backtracking, and number tweens can be interrupted without losing points. The system follows `prefers-reduced-motion`, including changes made during a game.
+The English dictionary is bundled locally. Gameplay does not call a third-party dictionary API. Source and license: [static/dictionary](static/dictionary/README.md).
 
 ## Verification
 
