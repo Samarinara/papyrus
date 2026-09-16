@@ -71,6 +71,7 @@ button:focus-visible {
 	position: relative;
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
+	perspective: 800px;
 	gap: 0;
 	touch-action: none;
 	user-select: none;
@@ -87,21 +88,61 @@ button:focus-visible {
 	background: transparent;
 	padding: 0;
 	isolation: isolate;
+	backface-visibility: hidden;
+	transform-style: preserve-3d;
+	transition:
+		background-color 140ms ease,
+		border-color 140ms ease,
+		box-shadow 140ms ease,
+		transform 140ms ease;
 }
 .tile.highlighted {
-	outline: 2px solid #7c826b;
-	outline-offset: 3px;
+	z-index: 3;
+	outline: 3px solid #35452d;
+	outline-offset: 2px;
+	box-shadow: 0 4px 12px rgb(53 69 45 / 22%);
+}
+.tile.highlighted::after {
+	content: '';
+	position: absolute;
+	inset: -7px;
+	border: 2px solid #607452;
+	border-radius: 10px;
+	pointer-events: none;
+	animation: cursor-halo 760ms ease-in-out infinite alternate;
 }
 .tile.selected .tile-face {
-	background: #cad2b9;
-	border-color: #a3af8c;
-	border-bottom-color: #8d9b76;
+	background: linear-gradient(145deg, #38352f, #292722);
+	border-color: #5c584f;
+	border-bottom-color: #191814;
+	animation: tile-flip 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.tile.deselecting .tile-face {
+	animation: tile-flip-back 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	animation-delay: var(--deselect-delay, 0ms);
 }
 .letter {
 	font-size: clamp(24px, 4.2vw, 48px);
 	line-height: 1;
 	font-weight: 700;
 	z-index: 2;
+	-webkit-text-stroke: 0 transparent;
+	paint-order: stroke fill;
+	transition:
+		opacity 150ms ease,
+		transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+		color 160ms ease,
+		-webkit-text-stroke-color 160ms ease;
+}
+.tile.selected .letter {
+	color: #ede4d1;
+	-webkit-text-stroke: 1px #ede4d1;
+	filter: none;
+	animation: selected-letter-flip 280ms linear both;
+}
+.tile.deselecting .letter {
+	animation: deselected-letter-flip 280ms linear both;
+	animation-delay: var(--deselect-delay, 0ms);
 }
 .letter-score {
 	position: absolute;
@@ -110,6 +151,22 @@ button:focus-visible {
 	font-size: 13px;
 	font-weight: 700;
 	z-index: 2;
+	transition:
+		opacity 150ms ease,
+		transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tile.refilling .letter,
+.tile.refilling .letter-score {
+	opacity: 0;
+	transform: scale(0.72);
+}
+.tile.selected .letter-score {
+	color: #ede4d1;
+	animation: selected-score-flip 280ms linear both;
+}
+.tile.deselecting .letter-score {
+	animation: deselected-score-flip 280ms linear both;
+	animation-delay: var(--deselect-delay, 0ms);
 }
 .connections {
 	position: absolute;
@@ -159,11 +216,26 @@ button:focus-visible {
 .score-columns > span + span {
 	border-left: 1px solid #cbc8bd;
 }
+.score-columns span {
+	padding-inline: 12px;
+	transition:
+		color 140ms ease,
+		transform 140ms ease;
+}
+.score-columns .active {
+	color: #536342;
+	animation: score-pop 260ms ease-out both;
+}
 .total {
 	padding-top: 22px;
 	font-size: clamp(44px, 6vw, 72px);
 	font-weight: 700;
 	overflow-wrap: anywhere;
+	transition: color 140ms ease;
+}
+.total.counting {
+	color: #536342;
+	animation: total-pulse 350ms ease-in-out infinite alternate;
 }
 .feedback {
 	min-height: 24px;
@@ -232,6 +304,124 @@ button:focus-visible {
 		transform: translateX(3px);
 	}
 }
+@keyframes cursor-halo {
+	from {
+		opacity: 0.35;
+		transform: scale(0.96);
+	}
+	to {
+		opacity: 0.8;
+		transform: scale(1.04);
+	}
+}
+@keyframes tile-flip {
+	0% {
+		background: linear-gradient(145deg, #f2e9d8, #e8dec9);
+		border-color: #cfc7b7;
+		border-bottom-color: #bcb29e;
+		transform: rotateY(0deg) translateZ(0);
+	}
+	49% {
+		background: linear-gradient(145deg, #f2e9d8, #e8dec9);
+		border-color: #cfc7b7;
+		border-bottom-color: #bcb29e;
+		transform: rotateY(90deg) translateZ(8px);
+	}
+	50% {
+		background: linear-gradient(145deg, #38352f, #292722);
+		border-color: #5c584f;
+		border-bottom-color: #191814;
+		transform: rotateY(-90deg) translateZ(8px);
+	}
+	100% {
+		background: linear-gradient(145deg, #38352f, #292722);
+		border-color: #5c584f;
+		border-bottom-color: #191814;
+		transform: rotateY(0deg) translateZ(0);
+	}
+}
+@keyframes tile-flip-back {
+	0% {
+		background: linear-gradient(145deg, #38352f, #292722);
+		border-color: #5c584f;
+		border-bottom-color: #191814;
+		transform: rotateY(0deg) translateZ(0);
+	}
+	49% {
+		background: linear-gradient(145deg, #38352f, #292722);
+		border-color: #5c584f;
+		border-bottom-color: #191814;
+		transform: rotateY(-90deg) translateZ(8px);
+	}
+	50% {
+		background: linear-gradient(145deg, #f2e9d8, #e8dec9);
+		border-color: #cfc7b7;
+		border-bottom-color: #bcb29e;
+		transform: rotateY(90deg) translateZ(8px);
+	}
+	100% {
+		background: linear-gradient(145deg, #f2e9d8, #e8dec9);
+		border-color: #cfc7b7;
+		border-bottom-color: #bcb29e;
+		transform: rotateY(0deg) translateZ(0);
+	}
+}
+@keyframes selected-letter-flip {
+	0%,
+	49% {
+		color: #302e29;
+		-webkit-text-stroke-color: transparent;
+	}
+	50%,
+	100% {
+		color: #ede4d1;
+		-webkit-text-stroke-color: #ede4d1;
+	}
+}
+@keyframes deselected-letter-flip {
+	0%,
+	49% {
+		color: #ede4d1;
+		-webkit-text-stroke-color: #ede4d1;
+	}
+	50%,
+	100% {
+		color: #302e29;
+		-webkit-text-stroke-color: transparent;
+	}
+}
+@keyframes selected-score-flip {
+	0%,
+	49% {
+		color: #302e29;
+	}
+	50%,
+	100% {
+		color: #ede4d1;
+	}
+}
+@keyframes deselected-score-flip {
+	0%,
+	49% {
+		color: #ede4d1;
+	}
+	50%,
+	100% {
+		color: #302e29;
+	}
+}
+@keyframes score-pop {
+	50% {
+		transform: scale(1.16);
+		text-shadow: 0 3px 14px rgb(83 99 66 / 24%);
+	}
+}
+@keyframes total-pulse {
+	to {
+		transform: scale(1.045);
+		text-shadow: 0 4px 18px rgb(83 99 66 / 20%);
+	}
+}
 @media (max-width: 600px) {
 	.game {
 		padding: 16px;
@@ -275,6 +465,30 @@ button:focus-visible {
 		animation: none;
 		border-color: #b44c40;
 	}
+	.tile,
+	.letter,
+	.letter-score,
+	.score-columns span,
+	.total {
+		animation: none;
+		transition: none;
+	}
+	.tile.highlighted::after {
+		animation: none;
+	}
+}
+@media (forced-colors: active) {
+	.tile.highlighted {
+		outline-color: Highlight;
+		box-shadow: none;
+	}
+	.tile.highlighted::after {
+		border-color: Highlight;
+	}
+	.tile.selected .letter {
+		-webkit-text-stroke-color: ButtonFace;
+		filter: drop-shadow(0 2px 0 ButtonText);
+	}
 }
 
 /* One motion vocabulary: quick pickups, soft landings, and a little score swagger. */
@@ -306,17 +520,27 @@ button:focus-visible {
 	box-shadow: 0 5px 8px #302e2912;
 }
 .tile.selected .tile-face {
-	translate: 0 -2px;
-	rotate: var(--tilt);
-	box-shadow: 0 3px 0 #8d9b7626;
+	translate: 0;
+	rotate: 0deg;
+	box-shadow: 0 3px 8px #302e2926;
 }
 .tile.selected .letter {
-	animation:
-		letter-pick 220ms var(--spring),
-		letter-sway 2.8s ease-in-out 220ms infinite;
+	animation: selected-letter-flip 280ms linear both;
 }
 .tile.selected .letter-score {
-	animation: pip-pick 240ms var(--spring);
+	animation: selected-score-flip 280ms linear both;
+}
+.tile.deselecting .tile-face {
+	translate: 0;
+	rotate: 0deg;
+}
+.tile.deselecting .letter {
+	animation: deselected-letter-flip 280ms linear both;
+	animation-delay: var(--deselect-delay, 0ms);
+}
+.tile.deselecting .letter-score {
+	animation: deselected-score-flip 280ms linear both;
+	animation-delay: var(--deselect-delay, 0ms);
 }
 .tile:active .tile-face {
 	translate: 0 1px;

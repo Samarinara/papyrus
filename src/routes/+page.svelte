@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { base } from '$app/paths';
 	import AnimatedNumber from '$lib/AnimatedNumber.svelte';
 	import {
@@ -25,6 +25,10 @@
 	let ready = $state(false);
 	let message = $state('');
 	let invalidTile = $state<number | null>(null);
+	let scoring = $state(false);
+	let scoringPhase = $state<'base' | 'multiplier' | 'total' | 'refill' | ''>('');
+	let scoredValue = $state(0);
+	let scoredMultiplier = $state(1);
 	let grid = $state<HTMLDivElement>();
 	let tileVersions = $state(Array<number>(16).fill(0));
 	let dealOrder = $state(Array.from({ length: 16 }, (_, index) => index));
@@ -35,13 +39,20 @@
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
 	let dealer = new LetterDealer();
+	const deselecting = new SvelteSet<number>();
+	const deselectDelays = new SvelteMap<number, number>();
+	const deselectTimers = new SvelteMap<number, ReturnType<typeof setTimeout>>();
 	let pointer: number | null = null;
 	let lastHit: number | null = null;
 	let errorTimer: ReturnType<typeof setTimeout>;
 	let movesBarTimer: ReturnType<typeof setTimeout>;
 	let trackBarTimer: ReturnType<typeof setTimeout>;
+	let animationRun = 0;
+	let reduceMotion = false;
 	const score = $derived(scoreFor(board, path));
 	const multiplier = $derived(multiplierFor(path.length));
+	const visibleScore = $derived(scoring ? scoredValue : score);
+	const visibleMultiplier = $derived(scoring ? scoredMultiplier : multiplier);
 	const word = $derived(wordFor(board, path));
 	const connections = $derived(path.slice(1).map((to, index) => ({ from: path[index], to })));
 
@@ -60,6 +71,7 @@
 
 	onMount(() => {
 		board = createBoard(dealer);
+		reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 		try {
 			const stored = Number(localStorage.getItem(HIGH_SCORE_KEY));
 			if (Number.isSafeInteger(stored) && stored >= 0) highScore = stored;
@@ -81,13 +93,17 @@
 					message = 'Could not load the dictionary. Refresh to retry.';
 			});
 		return () => {
+			animationRun += 1;
 			controller.abort();
 			clearTimeout(errorTimer);
+			clearTimeout(movesBarTimer);
+			clearTimeout(trackBarTimer);
+			for (const timer of deselectTimers.values()) clearTimeout(timer);
 		};
 	});
 
 	function select(index: number) {
-		if (!ready || moves === 0) return;
+		if (!ready || moves === 0 || scoring) return;
 		cursor = index;
 		const next = selectTile(path, index);
 		if (next === null) {
@@ -96,13 +112,58 @@
 			errorTimer = setTimeout(() => (invalidTile = null), 240);
 			return;
 		}
+		if (deselecting.has(index)) {
+			deselecting.delete(index);
+			deselectDelays.delete(index);
+			clearTimeout(deselectTimers.get(index));
+			deselectTimers.delete(index);
+		}
+		const removedIndices = path.filter((selectedIndex) => !next.includes(selectedIndex));
+		for (const [order, removedIndex] of removedIndices.entries()) {
+			const delay = order * 45;
+			deselecting.add(removedIndex);
+			deselectDelays.set(removedIndex, delay);
+			clearTimeout(deselectTimers.get(removedIndex));
+			const timer = setTimeout(
+				() => {
+					deselecting.delete(removedIndex);
+					deselectDelays.delete(removedIndex);
+					deselectTimers.delete(removedIndex);
+				},
+				reduceMotion ? 0 : 300 + delay
+			);
+			deselectTimers.set(removedIndex, timer);
+		}
 		path = next;
 		pulseBar('track');
 		message = '';
 	}
 
-	function submit() {
-		if (!ready || moves === 0) return;
+	const pause = (duration: number) =>
+		new Promise<void>((resolve) => setTimeout(resolve, reduceMotion ? 0 : duration));
+
+	function countTotal(from: number, to: number, run: number) {
+		if (reduceMotion) {
+			total = to;
+			return Promise.resolve();
+		}
+		return new Promise<void>((resolve) => {
+			const started = performance.now();
+			const duration = 700;
+			const frame = (now: number) => {
+				if (run !== animationRun) return resolve();
+				const progress = Math.min((now - started) / duration, 1);
+				const eased = 1 - Math.pow(1 - progress, 3);
+				total = Math.round(from + (to - from) * eased);
+				if (progress < 1) requestAnimationFrame(frame);
+				else resolve();
+			};
+			requestAnimationFrame(frame);
+		});
+	}
+
+	async function submit() {
+		if (!ready || moves === 0 || scoring) return;
 		const rejection = rejectionFor(word, dictionary, used);
 		if (rejection) {
 			message = rejection;
@@ -110,16 +171,47 @@
 			return;
 		}
 		used.add(word.toLowerCase());
-		award = { id: (award?.id ?? 0) + 1, points: score * multiplier, base: score, multiplier };
-		total += award.points;
-		dealOrder = board.map((_, index) => Math.max(0, path.indexOf(index)));
-		tileVersions = tileVersions.map((version, index) => version + Number(path.includes(index)));
-		board = replaceLetters(board, path, dealer);
+		message = '';
+		scoring = true;
+		scoredValue = score;
+		scoredMultiplier = multiplier;
+		const submittedPath = [...path];
+		const previousTotal = total;
+		const nextTotal = previousTotal + scoredValue * scoredMultiplier;
+		const replacements = replaceLetters(board, submittedPath, dealer);
+		dealOrder = board.map((_, index) => Math.max(0, submittedPath.indexOf(index)));
+		const run = ++animationRun;
+
+		scoringPhase = 'base';
+		await pause(260);
+		if (run !== animationRun) return;
+		scoringPhase = 'multiplier';
+		await pause(300);
+		if (run !== animationRun) return;
+		scoringPhase = 'total';
+		award = {
+			id: (award?.id ?? 0) + 1,
+			points: scoredValue * scoredMultiplier,
+			base: scoredValue,
+			multiplier: scoredMultiplier
+		};
+		await countTotal(previousTotal, nextTotal, run);
+		if (run !== animationRun) return;
+
+		scoringPhase = 'refill';
+		board = board.map((letter, index) => (submittedPath.includes(index) ? '' : letter));
 		path = [];
+		for (const index of submittedPath) {
+			await pause(55);
+			if (run !== animationRun) return;
+			board[index] = replacements[index];
+			tileVersions[index] += 1;
+		}
+		await pause(100);
+		if (run !== animationRun) return;
 		moves -= 1;
 		pulseBar('moves');
 		pulseBar('track');
-		message = '';
 		if (total > highScore) {
 			highScore = total;
 			try {
@@ -128,9 +220,12 @@
 				/* Keep the session high score. */
 			}
 		}
+		scoringPhase = '';
+		scoring = false;
 	}
 
 	function restart() {
+		animationRun += 1;
 		award = null;
 		invalidTile = null;
 		clearTimeout(errorTimer);
@@ -143,13 +238,19 @@
 		moves = 10;
 		total = 0;
 		used = new SvelteSet();
+		for (const timer of deselectTimers.values()) clearTimeout(timer);
+		deselectTimers.clear();
+		deselectDelays.clear();
+		deselecting.clear();
 		message = '';
+		scoring = false;
+		scoringPhase = '';
 		pointer = null;
 		lastHit = null;
 	}
 
 	function keydown(event: KeyboardEvent) {
-		if (moves === 0 || !ready || event.altKey || event.ctrlKey || event.metaKey) return;
+		if (moves === 0 || !ready || scoring || event.altKey || event.ctrlKey || event.metaKey) return;
 		if (
 			event.target instanceof HTMLButtonElement &&
 			!event.target.hasAttribute('data-tile') &&
@@ -255,14 +356,19 @@
 						<button
 							class="tile"
 							class:selected={path.includes(index)}
+							class:deselecting={deselecting.has(index)}
+							style:--deselect-delay={`${deselectDelays.get(index) ?? 0}ms`}
 							class:highlighted={cursor === index}
 							class:invalid={invalidTile === index}
 							style:--tilt={`${(((index * 7) % 5) - 2) * 0.7}deg`}
 							style:--deal-delay={`${dealOrder[index] * 14}ms`}
 							data-tile={index}
-							aria-label={`${letter}, ${LETTER_SCORES[letter]} points, row ${Math.floor(index / 4) + 1}, column ${(index % 4) + 1}`}
+							class:refilling={!letter}
+							aria-label={letter
+								? `${letter}, ${LETTER_SCORES[letter]} points, row ${Math.floor(index / 4) + 1}, column ${(index % 4) + 1}`
+								: 'New letter arriving'}
 							aria-pressed={path.includes(index)}
-							disabled={!ready}
+							disabled={!ready || scoring}
 							onpointerdown={(event) => pointerdown(event, index)}
 							onpointerenter={() => {
 								cursor = index;
@@ -295,27 +401,44 @@
 						{/each}
 					</svg>
 				</div>
-				<button class="submit" class:primed={path.length >= 2} onclick={submit} disabled={!ready}
-					>{ready ? 'Submit' : 'Loading…'}</button
+				<button
+					class="submit"
+					class:primed={path.length >= 2}
+					onclick={submit}
+					disabled={!ready || scoring}>{ready ? 'Submit' : 'Loading…'}</button
 				>
 			</div>
 
-			<div class="scoreboard" aria-label="Scoreboard">
+			<div class:scoring class="scoreboard" aria-label="Scoreboard">
 				<div class="score-columns">
-					<span aria-label={`Active word score: ${score}`} data-testid="word-score"
-						><AnimatedNumber value={score} label={`Active word score: ${score}`} /></span
-					>
-					<span aria-label={`Multiplier: ${multiplier}`} data-testid="multiplier"
+					<span
+						class:active={scoringPhase === 'base'}
+						aria-label={`Active word score: ${visibleScore}`}
+						data-testid="word-score"
 						><AnimatedNumber
-							value={multiplier}
+							value={visibleScore}
+							label={`Active word score: ${visibleScore}`}
+						/></span
+					>
+					<span
+						class:active={scoringPhase === 'multiplier'}
+						aria-label={`Multiplier: ${visibleMultiplier}`}
+						data-testid="multiplier"
+						><AnimatedNumber
+							value={visibleMultiplier}
 							suffix="×"
-							label={`Multiplier: ${multiplier}`}
+							label={`Multiplier: ${visibleMultiplier}`}
 							strong
 						/></span
 					>
 				</div>
-				<div class="total" aria-label={`Game total: ${total}`} data-testid="total">
-					<AnimatedNumber value={total} label={`Game total: ${total}`} strong />
+				<div
+					class:counting={scoringPhase === 'total'}
+					class="total"
+					aria-label={`Game total: ${total}`}
+					data-testid="total"
+				>
+					{total}
 				</div>
 				{#if award}
 					{#key award.id}
