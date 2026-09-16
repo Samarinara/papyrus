@@ -46,9 +46,8 @@ button:focus-visible {
 .moves-fill {
 	position: absolute;
 	inset: 0 auto 0 0;
-	background: #c7cebb;
 }
-.moves span {
+.moves-count {
 	position: relative;
 	display: grid;
 	height: 100%;
@@ -83,10 +82,9 @@ button:focus-visible {
 	display: grid;
 	place-items: center;
 	aspect-ratio: 1;
-	border: 1px solid #cfc7b7;
-	border-bottom: 3px solid #bcb29e;
+	border: 0;
 	border-radius: 7px;
-	background: #ede4d1;
+	background: transparent;
 	padding: 0;
 	isolation: isolate;
 }
@@ -94,7 +92,7 @@ button:focus-visible {
 	outline: 2px solid #7c826b;
 	outline-offset: 3px;
 }
-.tile.selected {
+.tile.selected .tile-face {
 	background: #cad2b9;
 	border-color: #a3af8c;
 	border-bottom-color: #8d9b76;
@@ -121,7 +119,7 @@ button:focus-visible {
 	pointer-events: none;
 	overflow: visible;
 }
-.connections polyline {
+.connections line {
 	fill: none;
 	stroke: #596749;
 	stroke-width: 4;
@@ -158,7 +156,7 @@ button:focus-visible {
 	padding-bottom: 24px;
 	font-size: clamp(25px, 3.4vw, 40px);
 }
-.score-columns span + span {
+.score-columns > span + span {
 	border-left: 1px solid #cbc8bd;
 }
 .total {
@@ -175,6 +173,9 @@ button:focus-visible {
 	color: #8d3f35;
 }
 .letter-track {
+	position: relative;
+	isolation: isolate;
+	background: #eeece5;
 	display: grid;
 	grid-template-columns: repeat(10, 1fr);
 	flex-shrink: 0;
@@ -183,20 +184,19 @@ button:focus-visible {
 	overflow: hidden;
 	margin-top: auto;
 }
-.letter-track div {
+.letter-track .track-step {
+	position: relative;
 	display: grid;
 	place-items: center;
 	min-height: 52px;
 	font-size: 15px;
 	color: #767369;
-	background: #eeece5;
 }
-.letter-track div + div {
+.track-step ~ .track-step {
 	border-left: 1px solid #d2cfc5;
 }
 .letter-track .filled {
 	color: #303829;
-	background: #c7cebb;
 }
 .end-screen {
 	margin: auto;
@@ -264,7 +264,8 @@ button:focus-visible {
 		font-size: 38px;
 		padding-top: 16px;
 	}
-	.letter-track div {
+	.letter-track .track-step {
+		position: relative;
 		min-height: 44px;
 		font-size: 12px;
 	}
@@ -273,5 +274,283 @@ button:focus-visible {
 	.invalid {
 		animation: none;
 		border-color: #b44c40;
+	}
+}
+
+/* One motion vocabulary: quick pickups, soft landings, and a little score swagger. */
+:root {
+	--spring: cubic-bezier(0.2, 1.5, 0.4, 1);
+	--settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tile-face {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	border: 1px solid #cfc7b7;
+	border-bottom: 3px solid #bcb29e;
+	border-radius: inherit;
+	background: linear-gradient(145deg, #f2e9d8, #e8dec9);
+	box-shadow: 0 2px 2px #302e2908;
+	transition:
+		translate 150ms var(--spring),
+		rotate 180ms var(--spring),
+		background 120ms,
+		box-shadow 150ms;
+	animation: deal-in 280ms var(--settle) both;
+	animation-delay: var(--deal-delay);
+}
+.tile.highlighted .tile-face {
+	translate: 0 -3px;
+	rotate: var(--tilt);
+	box-shadow: 0 5px 8px #302e2912;
+}
+.tile.selected .tile-face {
+	translate: 0 -2px;
+	rotate: var(--tilt);
+	box-shadow: 0 3px 0 #8d9b7626;
+}
+.tile.selected .letter {
+	animation:
+		letter-pick 220ms var(--spring),
+		letter-sway 2.8s ease-in-out 220ms infinite;
+}
+.tile.selected .letter-score {
+	animation: pip-pick 240ms var(--spring);
+}
+.tile:active .tile-face {
+	translate: 0 1px;
+}
+.connections line {
+	stroke-dasharray: 1;
+	stroke-dashoffset: 0;
+	animation: draw-link 130ms var(--settle) both;
+}
+.liquid-fill {
+	position: absolute;
+	inset: 0 auto 0 0;
+	background: linear-gradient(180deg, #d4dbc8, #bdc9ae 65%, #b1c09f);
+	transition:
+		width 380ms cubic-bezier(0.2, 0.85, 0.25, 1),
+		background 200ms;
+	border-radius: 0 8px 8px 0;
+}
+.liquid-fill::before,
+.liquid-fill::after {
+	content: '';
+	position: absolute;
+	right: -7px;
+	top: -18px;
+	width: 20px;
+	height: 88px;
+	border-radius: 46% 54% 42% 58%;
+	background: #c4d0b7;
+	animation: liquid-edge 2.7s ease-in-out infinite alternate;
+}
+.liquid-fill::after {
+	right: -3px;
+	background: #d5dec9;
+	opacity: 0.65;
+	animation-delay: -1.4s;
+	animation-direction: alternate-reverse;
+}
+.liquid-fill[style*='width: 0%']::before,
+.liquid-fill[style*='width: 0%']::after {
+	display: none;
+}
+.moves.low .liquid-fill {
+	background: linear-gradient(180deg, #e4cfaa, #cfb283);
+}
+.moves.low .liquid-fill::before,
+.moves.low .liquid-fill::after {
+	background: #ddc396;
+}
+.track-fill {
+	z-index: -1;
+}
+.track-step {
+	transition: color 160ms;
+}
+.track-step span {
+	display: inline-block;
+}
+.track-step.filled span {
+	animation: pip-pick 220ms var(--spring);
+}
+.track-step.milestone.filled span {
+	animation: multiplier-pick 320ms var(--spring);
+	font-weight: 700;
+}
+.submit {
+	transition:
+		transform 130ms var(--spring),
+		background 130ms,
+		box-shadow 130ms;
+	box-shadow: 0 3px 0 #2c3323;
+}
+.submit:hover:not(:disabled) {
+	transform: translateY(-2px);
+	box-shadow: 0 5px 0 #2c3323;
+}
+.submit:active:not(:disabled) {
+	transform: translateY(2px);
+	box-shadow: 0 1px 0 #2c3323;
+}
+.submit.primed {
+	background: #536543;
+}
+.scoreboard {
+	position: relative;
+}
+.score-award {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	width: 100%;
+	pointer-events: none;
+	color: #52683d;
+	animation: award-rise 1000ms both;
+}
+.award-formula,
+.award-points {
+	display: block;
+}
+.award-formula {
+	font-size: 13px;
+	padding-top: 8px;
+}
+.award-points {
+	font-size: clamp(24px, 3vw, 36px);
+	font-weight: 700;
+}
+.feedback p {
+	margin: 0;
+}
+.rejected {
+	animation: shake 220ms ease-in-out;
+}
+.end-screen {
+	animation: finish-in 380ms var(--settle) both;
+}
+.final-score {
+	animation: multiplier-pick 420ms var(--spring);
+}
+.high-score {
+	animation: finish-in 350ms 100ms var(--settle) both;
+}
+@keyframes deal-in {
+	from {
+		opacity: 0;
+		transform: translateY(-12px) scale(0.87) rotate(var(--tilt));
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1) rotate(0deg);
+	}
+}
+@keyframes letter-pick {
+	0% {
+		transform: scale(1);
+	}
+	45% {
+		transform: scale(1.19, 0.92) rotate(-4deg);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+@keyframes letter-sway {
+	0%,
+	100% {
+		transform: translateY(0) rotate(0deg);
+	}
+	50% {
+		transform: translateY(-1.5px) rotate(var(--tilt));
+	}
+}
+@keyframes pip-pick {
+	0% {
+		transform: translateY(3px) scale(0.8);
+	}
+	60% {
+		transform: translateY(-2px) scale(1.1);
+	}
+	100% {
+		transform: translateY(0) scale(1);
+	}
+}
+@keyframes multiplier-pick {
+	0% {
+		transform: scale(0.85) rotate(-5deg);
+	}
+	50% {
+		transform: scale(1.2) rotate(3deg);
+	}
+	100% {
+		transform: scale(1) rotate(0);
+	}
+}
+@keyframes draw-link {
+	from {
+		stroke-dashoffset: 1;
+		opacity: 0.7;
+	}
+	to {
+		stroke-dashoffset: 0;
+		opacity: 0.38;
+	}
+}
+@keyframes liquid-edge {
+	from {
+		transform: translateY(-7px) rotate(-7deg) scaleX(0.75);
+	}
+	to {
+		transform: translateY(5px) rotate(9deg) scaleX(1.1);
+	}
+}
+@keyframes award-rise {
+	0% {
+		opacity: 0;
+		transform: translateY(12px) scale(0.8) rotate(-5deg);
+	}
+	18% {
+		opacity: 1;
+		transform: translateY(0) scale(1.08) rotate(2deg);
+	}
+	35%,
+	65% {
+		opacity: 1;
+		transform: translateY(-3px) scale(1) rotate(0deg);
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(-20px) scale(0.96);
+	}
+}
+@keyframes finish-in {
+	from {
+		opacity: 0;
+		transform: translateY(16px) scale(0.97);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation: none !important;
+		transition: none !important;
+	}
+	.tile-face,
+	.tile.highlighted .tile-face,
+	.tile.selected .tile-face {
+		translate: none;
+		rotate: none;
+	}
+	.score-award {
+		opacity: 1;
 	}
 }
