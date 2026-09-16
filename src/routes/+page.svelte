@@ -6,9 +6,10 @@
 	import {
 		createBoard,
 		HIGH_SCORE_KEY,
+		LetterDealer,
 		LETTER_SCORES,
 		multiplierFor,
-		randomLetter,
+		replaceLetters,
 		rejectionFor,
 		scoreFor,
 		selectTile,
@@ -33,6 +34,7 @@
 	let trackBarScale = $state(1);
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
+	let dealer = new LetterDealer();
 	let pointer: number | null = null;
 	let lastHit: number | null = null;
 	let errorTimer: ReturnType<typeof setTimeout>;
@@ -57,7 +59,7 @@
 	}
 
 	onMount(() => {
-		board = createBoard();
+		board = createBoard(dealer);
 		try {
 			const stored = Number(localStorage.getItem(HIGH_SCORE_KEY));
 			if (Number.isSafeInteger(stored) && stored >= 0) highScore = stored;
@@ -112,7 +114,7 @@
 		total += award.points;
 		dealOrder = board.map((_, index) => Math.max(0, path.indexOf(index)));
 		tileVersions = tileVersions.map((version, index) => version + Number(path.includes(index)));
-		board = board.map((letter, index) => (path.includes(index) ? randomLetter() : letter));
+		board = replaceLetters(board, path, dealer);
 		path = [];
 		moves -= 1;
 		pulseBar('moves');
@@ -134,7 +136,8 @@
 		clearTimeout(errorTimer);
 		dealOrder = Array.from({ length: 16 }, (_, index) => index);
 		tileVersions = tileVersions.map((version) => version + 1);
-		board = createBoard();
+		dealer = new LetterDealer();
+		board = createBoard(dealer);
 		path = [];
 		cursor = null;
 		moves = 10;
