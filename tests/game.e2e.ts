@@ -18,6 +18,9 @@ const tile = (page: Page, index: number) => page.locator(`[data-tile="${index}"]
 async function play(page: Page, path: number[]) {
 	for (const index of path) await tile(page, index).click();
 	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => !document.querySelector('.scoreboard.scoring'), null, {
+		timeout: 5000
+	});
 }
 
 async function findPlayablePath(
@@ -100,6 +103,7 @@ test('keyboard, adjacency errors, backtracking, invalid words and replacement', 
 });
 
 test('ten accepted words, final score, restart and stored high score', async ({ page }) => {
+	test.setTimeout(45_000);
 	await setup(page);
 	const used: string[] = [];
 	for (let move = 0; move < 10; move += 1) {
@@ -186,7 +190,14 @@ test('rapid selections settle correctly and backtracking removes only trailing l
 	await expect(page.getByTestId('multiplier')).toHaveText('1×');
 	await expect(page.locator('.connections line')).toHaveCount(2);
 	expect(await firstLink!.evaluate((node) => node.isConnected)).toBe(true);
-	await tile(page, 0).click();
+	const releaseDelays = await page.evaluate(async () => {
+		document.querySelector<HTMLButtonElement>('[data-tile="0"]')!.click();
+		await new Promise(requestAnimationFrame);
+		return [...document.querySelectorAll<HTMLElement>('.tile.deselecting')].map((element) =>
+			element.style.getPropertyValue('--deselect-delay')
+		);
+	});
+	expect(releaseDelays.slice(0, 3)).toEqual(['0ms', '45ms', '90ms']);
 	await playAvailableWord(page);
 	await expect(page.getByTestId('total')).not.toHaveText('0');
 	await expect(page.locator('.award-points')).not.toHaveText('+0');

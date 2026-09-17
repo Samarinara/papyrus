@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { base } from '$app/paths';
 	import AnimatedNumber from '$lib/AnimatedNumber.svelte';
 	import {
@@ -25,6 +25,7 @@
 	let ready = $state(false);
 	let message = $state('');
 	let invalidTile = $state<number | null>(null);
+	let scoring = $state(false);
 	let grid = $state<HTMLDivElement>();
 	let tileVersions = $state(Array<number>(16).fill(0));
 	let dealOrder = $state(Array.from({ length: 16 }, (_, index) => index));
@@ -34,12 +35,16 @@
 	let trackBarScale = $state(1);
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
+	const deselecting = new SvelteSet<number>();
+	const deselectDelays = new SvelteMap<number, number>();
+	const deselectTimers = new SvelteMap<number, ReturnType<typeof setTimeout>>();
 	let dealer = new LetterDealer();
 	let pointer: number | null = null;
 	let lastHit: number | null = null;
 	let errorTimer: ReturnType<typeof setTimeout>;
 	let movesBarTimer: ReturnType<typeof setTimeout>;
 	let trackBarTimer: ReturnType<typeof setTimeout>;
+	let scoreSequence = 0;
 	const score = $derived(scoreFor(board, path));
 	const multiplier = $derived(multiplierFor(path.length));
 	const word = $derived(wordFor(board, path));
@@ -81,13 +86,41 @@
 					message = 'Could not load the dictionary. Refresh to retry.';
 			});
 		return () => {
+			scoreSequence += 1;
 			controller.abort();
 			clearTimeout(errorTimer);
+			clearTimeout(movesBarTimer);
+			clearTimeout(trackBarTimer);
+			for (const timer of deselectTimers.values()) clearTimeout(timer);
 		};
 	});
 
+	const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+	const pause = (duration: number) =>
+		new Promise<void>((resolve) => setTimeout(resolve, reducedMotion() ? 0 : duration));
+
+	function cascadeDeselect(indices: number[]) {
+		const reduced = reducedMotion();
+		for (const [order, tileIndex] of indices.entries()) {
+			const delay = reduced ? 0 : order * 45;
+			deselecting.add(tileIndex);
+			deselectDelays.set(tileIndex, delay);
+			clearTimeout(deselectTimers.get(tileIndex));
+			const timer = setTimeout(
+				() => {
+					deselecting.delete(tileIndex);
+					deselectDelays.delete(tileIndex);
+					deselectTimers.delete(tileIndex);
+				},
+				reduced ? 0 : delay + 280
+			);
+			deselectTimers.set(tileIndex, timer);
+		}
+		return reduced || indices.length === 0 ? 0 : (indices.length - 1) * 45 + 300;
+	}
+
 	function select(index: number) {
-		if (!ready || moves === 0) return;
+		if (!ready || moves === 0 || scoring) return;
 		cursor = index;
 		const next = selectTile(path, index);
 		if (next === null) {
@@ -96,13 +129,20 @@
 			errorTimer = setTimeout(() => (invalidTile = null), 240);
 			return;
 		}
+		if (deselecting.has(index)) {
+			deselecting.delete(index);
+			deselectDelays.delete(index);
+			clearTimeout(deselectTimers.get(index));
+			deselectTimers.delete(index);
+		}
+		cascadeDeselect(path.filter((selectedIndex) => !next.includes(selectedIndex)));
 		path = next;
 		pulseBar('track');
 		message = '';
 	}
 
-	function submit() {
-		if (!ready || moves === 0) return;
+	async function submit() {
+		if (!ready || moves === 0 || scoring) return;
 		const rejection = rejectionFor(word, dictionary, used);
 		if (rejection) {
 			message = rejection;
@@ -110,16 +150,26 @@
 			return;
 		}
 		used.add(word.toLowerCase());
+		scoring = true;
+		const submittedPath = [...path];
+		const replacements = replaceLetters(board, submittedPath, dealer);
+		const run = ++scoreSequence;
 		award = { id: (award?.id ?? 0) + 1, points: score * multiplier, base: score, multiplier };
 		total += award.points;
-		dealOrder = board.map((_, index) => Math.max(0, path.indexOf(index)));
-		tileVersions = tileVersions.map((version, index) => version + Number(path.includes(index)));
-		board = replaceLetters(board, path, dealer);
+		message = '';
+		await pause(620);
+		if (run !== scoreSequence) return;
 		path = [];
+		await pause(cascadeDeselect(submittedPath));
+		if (run !== scoreSequence) return;
+		dealOrder = board.map((_, index) => Math.max(0, submittedPath.indexOf(index)));
+		tileVersions = tileVersions.map(
+			(version, index) => version + Number(submittedPath.includes(index))
+		);
+		board = replacements;
 		moves -= 1;
 		pulseBar('moves');
 		pulseBar('track');
-		message = '';
 		if (total > highScore) {
 			highScore = total;
 			try {
@@ -128,9 +178,11 @@
 				/* Keep the session high score. */
 			}
 		}
+		scoring = false;
 	}
 
 	function restart() {
+		scoreSequence += 1;
 		award = null;
 		invalidTile = null;
 		clearTimeout(errorTimer);
@@ -143,13 +195,18 @@
 		moves = 10;
 		total = 0;
 		used = new SvelteSet();
+		for (const timer of deselectTimers.values()) clearTimeout(timer);
+		deselectTimers.clear();
+		deselectDelays.clear();
+		deselecting.clear();
 		message = '';
+		scoring = false;
 		pointer = null;
 		lastHit = null;
 	}
 
 	function keydown(event: KeyboardEvent) {
-		if (moves === 0 || !ready || event.altKey || event.ctrlKey || event.metaKey) return;
+		if (moves === 0 || !ready || scoring || event.altKey || event.ctrlKey || event.metaKey) return;
 		if (
 			event.target instanceof HTMLButtonElement &&
 			!event.target.hasAttribute('data-tile') &&
@@ -255,14 +312,16 @@
 						<button
 							class="tile"
 							class:selected={path.includes(index)}
+							class:deselecting={deselecting.has(index)}
 							class:highlighted={cursor === index}
 							class:invalid={invalidTile === index}
+							style:--deselect-delay={`${deselectDelays.get(index) ?? 0}ms`}
 							style:--tilt={`${(((index * 7) % 5) - 2) * 0.7}deg`}
 							style:--deal-delay={`${dealOrder[index] * 14}ms`}
 							data-tile={index}
 							aria-label={`${letter}, ${LETTER_SCORES[letter]} points, row ${Math.floor(index / 4) + 1}, column ${(index % 4) + 1}`}
 							aria-pressed={path.includes(index)}
-							disabled={!ready}
+							disabled={!ready || scoring}
 							onpointerdown={(event) => pointerdown(event, index)}
 							onpointerenter={() => {
 								cursor = index;
@@ -295,12 +354,15 @@
 						{/each}
 					</svg>
 				</div>
-				<button class="submit" class:primed={path.length >= 2} onclick={submit} disabled={!ready}
-					>{ready ? 'Submit' : 'Loading…'}</button
+				<button
+					class="submit"
+					class:primed={path.length >= 2}
+					onclick={submit}
+					disabled={!ready || scoring}>{ready ? 'Submit' : 'Loading…'}</button
 				>
 			</div>
 
-			<div class="scoreboard" aria-label="Scoreboard">
+			<div class:scoring class="scoreboard" aria-label="Scoreboard">
 				<div class="score-columns">
 					<span aria-label={`Active word score: ${score}`} data-testid="word-score"
 						><AnimatedNumber value={score} label={`Active word score: ${score}`} /></span
