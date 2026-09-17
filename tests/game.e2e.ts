@@ -103,7 +103,7 @@ test('keyboard, adjacency errors, backtracking, invalid words and replacement', 
 });
 
 test('ten accepted words, final score, restart and stored high score', async ({ page }) => {
-	test.setTimeout(45_000);
+	test.setTimeout(75_000);
 	await setup(page);
 	const used: string[] = [];
 	for (let move = 0; move < 10; move += 1) {
@@ -133,7 +133,7 @@ test('mouse dragging selects a connected word', async ({ page }) => {
 	await page.mouse.down();
 	await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2, { steps: 20 });
 	await page.mouse.up();
-	await expect(page.getByTestId('word-score')).not.toHaveText('0');
+	await expect(page.getByTestId('word-score')).toHaveText('0');
 	await expect(page.getByRole('meter', { name: 'Selected letters' })).toHaveAttribute(
 		'aria-valuenow',
 		'3'
@@ -160,7 +160,7 @@ test('touch dragging and small-screen layout', async ({ browser }) => {
 		});
 	}
 	await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-	await expect(page.getByTestId('word-score')).not.toHaveText('0');
+	await expect(page.getByTestId('word-score')).toHaveText('0');
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
 		true
 	);
@@ -179,14 +179,12 @@ test('rapid selections settle correctly and backtracking removes only trailing l
 			await new Promise(requestAnimationFrame);
 		}
 	});
-	const fourLetterScore = Number(await page.getByTestId('word-score').textContent());
-	expect(fourLetterScore).toBeGreaterThan(0);
+	await expect(page.getByTestId('word-score')).toHaveText('0');
 	await expect(page.getByTestId('multiplier')).toHaveText('2×');
 	await expect(page.locator('.connections line')).toHaveCount(3);
 	const firstLink = await page.locator('.connections line').first().elementHandle();
 	await tile(page, 3).click();
-	const threeLetterScore = Number(await page.getByTestId('word-score').textContent());
-	expect(threeLetterScore).toBeGreaterThan(0);
+	await expect(page.getByTestId('word-score')).toHaveText('0');
 	await expect(page.getByTestId('multiplier')).toHaveText('1×');
 	await expect(page.locator('.connections line')).toHaveCount(2);
 	expect(await firstLink!.evaluate((node) => node.isConnected)).toBe(true);
@@ -218,6 +216,20 @@ test('reduced motion keeps scores immediate and responds to preference changes',
 		document.querySelector<HTMLButtonElement>('[data-tile="0"]')!.click();
 	});
 	await page.emulateMedia({ reducedMotion: 'reduce' });
-	await expect(page.getByTestId('word-score')).not.toHaveText('0');
+	await expect(page.getByTestId('word-score')).toHaveText('0');
 	expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+});
+
+test('submitted letters count into the word score one at a time', async ({ page }) => {
+	await setup(page);
+	const choice = await findPlayablePath(page);
+	for (const index of choice.path) await tile(page, index).click();
+	await expect(page.getByTestId('word-score')).toHaveText('0');
+	await page.keyboard.press('Enter');
+	await expect(page.locator('.tile.counting')).toHaveCount(1);
+	await expect(page.getByTestId('word-score')).not.toHaveText('0');
+	await expect(page.locator('.tile.counted')).toHaveCount(choice.path.length);
+	await page.waitForFunction(() => !document.querySelector('.scoreboard.scoring'));
+	await expect(page.getByTestId('word-score')).toHaveText('0');
+	await expect(page.getByTestId('total')).not.toHaveText('0');
 });

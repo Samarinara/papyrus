@@ -156,11 +156,26 @@ button:focus-visible {
 	padding-bottom: 24px;
 	font-size: clamp(25px, 3.4vw, 40px);
 }
-.score-columns > span + span {
+.score-stat {
+	display: grid;
+	gap: 6px;
+}
+.score-stat + .score-stat {
 	border-left: 1px solid #cbc8bd;
 }
+.score-label,
+.total-label {
+	color: #7b786e;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.total-label {
+	padding-top: 18px;
+}
 .total {
-	padding-top: 22px;
+	padding-top: 2px;
 	font-size: clamp(44px, 6vw, 72px);
 	font-weight: 700;
 	overflow-wrap: anywhere;
@@ -320,6 +335,29 @@ button:focus-visible {
 .tile.selected .letter-score {
 	animation: pip-pick 240ms var(--spring);
 }
+.tile.counted .tile-face {
+	background-color: #d8dfc8;
+	border-color: #96a77c;
+	box-shadow: 0 0 0 4px rgb(116 139 82 / 10%);
+}
+.tile.counting .tile-face {
+	animation: score-tile 320ms var(--spring) both;
+}
+.tile.counting .letter-score {
+	animation: score-pip 320ms var(--spring);
+}
+.score-tick {
+	position: absolute;
+	top: 4%;
+	left: 50%;
+	z-index: 5;
+	color: #40582e;
+	font-size: clamp(18px, 2.4vw, 28px);
+	font-weight: 800;
+	text-shadow: 0 1px 0 #f7f6f2;
+	pointer-events: none;
+	animation: score-tick-rise 320ms var(--settle) both;
+}
 .tile.deselecting .tile-face {
 	transition-delay: var(--deselect-delay, 0ms);
 }
@@ -330,6 +368,20 @@ button:focus-visible {
 	stroke-dasharray: 1;
 	stroke-dashoffset: 0;
 	animation: draw-link 130ms var(--settle) both;
+	transition:
+		stroke 220ms,
+		opacity 220ms,
+		stroke-width 220ms;
+}
+.connections line.counted-link {
+	stroke: #718e54;
+	opacity: 0.62;
+}
+.connections line.counting-link {
+	stroke: #4f6d35;
+	stroke-width: 7;
+	opacity: 0.92;
+	animation: score-link 320ms var(--settle) both;
 }
 .bar-fill {
 	position: absolute;
@@ -384,6 +436,9 @@ button:focus-visible {
 }
 .scoreboard.scoring .total {
 	color: #52683d;
+}
+.scoreboard.scoring .score-columns {
+	border-bottom-color: #9eaa8f;
 }
 .score-award {
 	position: absolute;
@@ -471,6 +526,56 @@ button:focus-visible {
 	}
 	100% {
 		transform: scale(1) rotate(0);
+	}
+}
+@keyframes score-tile {
+	0% {
+		transform: translateY(0) scale(1) rotate(0);
+	}
+	45% {
+		transform: translateY(-7px) scale(1.09) rotate(var(--tilt));
+		box-shadow: 0 10px 18px rgb(64 88 46 / 20%);
+	}
+	100% {
+		transform: translateY(-2px) scale(1) rotate(var(--tilt));
+	}
+}
+@keyframes score-pip {
+	0%,
+	100% {
+		transform: scale(1);
+	}
+	45% {
+		transform: scale(1.6) rotate(8deg);
+		color: #40582e;
+	}
+}
+@keyframes score-tick-rise {
+	0% {
+		opacity: 0;
+		transform: translate(-50%, 12px) scale(0.65) rotate(-7deg);
+	}
+	28% {
+		opacity: 1;
+		transform: translate(-50%, -8px) scale(1.12) rotate(2deg);
+	}
+	100% {
+		opacity: 0;
+		transform: translate(-50%, -36px) scale(0.95) rotate(0);
+	}
+}
+@keyframes score-link {
+	0% {
+		stroke-dashoffset: 1;
+		opacity: 0.25;
+	}
+	45% {
+		stroke-dashoffset: 0;
+		opacity: 1;
+	}
+	100% {
+		stroke-dashoffset: 0;
+		opacity: 0.62;
 	}
 }
 @keyframes draw-link {

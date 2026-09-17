@@ -30,11 +30,15 @@
 	let tileVersions = $state(Array<number>(16).fill(0));
 	let dealOrder = $state(Array.from({ length: 16 }, (_, index) => index));
 	let award = $state<{ id: number; points: number; base: number; multiplier: number } | null>(null);
+	let countedScore = $state(0);
+	let scoringTile = $state<number | null>(null);
+	let scoreTick = $state(0);
 	let rejectionCount = $state(0);
 	let movesBarScale = $state(1);
 	let trackBarScale = $state(1);
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
+	const countedTiles = new SvelteSet<number>();
 	const deselecting = new SvelteSet<number>();
 	const deselectDelays = new SvelteMap<number, number>();
 	const deselectTimers = new SvelteMap<number, ReturnType<typeof setTimeout>>();
@@ -154,10 +158,37 @@
 		const submittedPath = [...path];
 		const replacements = replaceLetters(board, submittedPath, dealer);
 		const run = ++scoreSequence;
-		award = { id: (award?.id ?? 0) + 1, points: score * multiplier, base: score, multiplier };
-		total += award.points;
+		const baseScore = score;
+		const submittedMultiplier = multiplier;
+		const awardId = (award?.id ?? 0) + 1;
+		// Give every letter a readable beat without making exceptionally long words drag.
+		const beat = submittedPath.length >= 9 ? 250 : 340;
+		award = null;
+		countedScore = 0;
+		countedTiles.clear();
 		message = '';
-		await pause(620);
+		await pause(180);
+
+		for (const tileIndex of submittedPath) {
+			if (run !== scoreSequence) return;
+			scoringTile = tileIndex;
+			countedTiles.add(tileIndex);
+			countedScore += LETTER_SCORES[board[tileIndex]];
+			scoreTick += 1;
+			await pause(beat);
+		}
+		if (run !== scoreSequence) return;
+		scoringTile = null;
+		await pause(260);
+		if (run !== scoreSequence) return;
+		award = {
+			id: awardId,
+			points: baseScore * submittedMultiplier,
+			base: baseScore,
+			multiplier: submittedMultiplier
+		};
+		total += award.points;
+		await pause(900);
 		if (run !== scoreSequence) return;
 		path = [];
 		await pause(cascadeDeselect(submittedPath));
@@ -178,12 +209,17 @@
 				/* Keep the session high score. */
 			}
 		}
+		countedScore = 0;
+		countedTiles.clear();
 		scoring = false;
 	}
 
 	function restart() {
 		scoreSequence += 1;
 		award = null;
+		countedScore = 0;
+		scoringTile = null;
+		countedTiles.clear();
 		invalidTile = null;
 		clearTimeout(errorTimer);
 		dealOrder = Array.from({ length: 16 }, (_, index) => index);
@@ -313,6 +349,8 @@
 							class="tile"
 							class:selected={path.includes(index)}
 							class:deselecting={deselecting.has(index)}
+							class:counting={scoringTile === index}
+							class:counted={countedTiles.has(index)}
 							class:highlighted={cursor === index}
 							class:invalid={invalidTile === index}
 							style:--deselect-delay={`${deselectDelays.get(index) ?? 0}ms`}
@@ -338,6 +376,11 @@
 								<span class="tile-face">
 									<span class="letter">{letter}</span>
 									<span class="letter-score">{LETTER_SCORES[letter]}</span>
+									{#if scoringTile === index}
+										{#key scoreTick}
+											<span class="score-tick" aria-hidden="true">+{LETTER_SCORES[letter]}</span>
+										{/key}
+									{/if}
 								</span>
 							{/key}
 						</button>
@@ -345,6 +388,8 @@
 					<svg class="connections" viewBox="0 0 400 400" aria-hidden="true">
 						{#each connections as { from, to } (`${from}-${to}`)}
 							<line
+								class:counted-link={countedTiles.has(to)}
+								class:counting-link={scoringTile === to}
 								x1={(from % 4) * 100 + 50}
 								y1={Math.floor(from / 4) * 100 + 50}
 								x2={(to % 4) * 100 + 50}
@@ -358,24 +403,36 @@
 					class="submit"
 					class:primed={path.length >= 2}
 					onclick={submit}
-					disabled={!ready || scoring}>{ready ? 'Submit' : 'Loading…'}</button
+					disabled={!ready || scoring}
+					>{scoring ? 'Counting…' : ready ? 'Submit' : 'Loading…'}</button
 				>
 			</div>
 
 			<div class:scoring class="scoreboard" aria-label="Scoreboard">
 				<div class="score-columns">
-					<span aria-label={`Active word score: ${score}`} data-testid="word-score"
-						><AnimatedNumber value={score} label={`Active word score: ${score}`} /></span
-					>
-					<span aria-label={`Multiplier: ${multiplier}`} data-testid="multiplier"
-						><AnimatedNumber
-							value={multiplier}
-							suffix="×"
-							label={`Multiplier: ${multiplier}`}
-							strong
-						/></span
-					>
+					<div class="score-stat">
+						<span class="score-label" aria-hidden="true">Word</span>
+						<span aria-label={`Submitted word score: ${countedScore}`} data-testid="word-score"
+							><AnimatedNumber
+								value={countedScore}
+								label={`Submitted word score: ${countedScore}`}
+								strong
+							/></span
+						>
+					</div>
+					<div class="score-stat">
+						<span class="score-label" aria-hidden="true">Multiplier</span>
+						<span aria-label={`Multiplier: ${multiplier}`} data-testid="multiplier"
+							><AnimatedNumber
+								value={multiplier}
+								suffix="×"
+								label={`Multiplier: ${multiplier}`}
+								strong
+							/></span
+						>
+					</div>
 				</div>
+				<div class="total-label" aria-hidden="true">Total</div>
 				<div class="total" aria-label={`Game total: ${total}`} data-testid="total">
 					<AnimatedNumber value={total} label={`Game total: ${total}`} strong />
 				</div>
