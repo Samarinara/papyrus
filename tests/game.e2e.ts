@@ -3,7 +3,10 @@ import { expect, test, type Page } from '@playwright/test';
 async function setup(page: Page) {
 	await page.addInitScript(() => {
 		let seed = 42;
+		let draw = 0;
 		Math.random = () => {
+			// Keep interaction regressions on ordinary tiles. Special types have dedicated cases.
+			if (draw++ % 2 === 1) return 0.5;
 			seed = (seed * 1664525 + 1013904223) >>> 0;
 			return seed / 2 ** 32;
 		};
@@ -232,4 +235,64 @@ test('submitted letters count into the word score one at a time', async ({ page 
 	await page.waitForFunction(() => !document.querySelector('.scoreboard.scoring'));
 	await expect(page.getByTestId('word-score')).toHaveText('0');
 	await expect(page.getByTestId('total')).not.toHaveText('0');
+});
+
+async function setupSpecial(page: Page, draws: number[]) {
+	await page.addInitScript((values) => {
+		Math.random = () => values.shift() ?? 0.5;
+	}, draws);
+	await page.route('**/dictionary/words.txt', (route) => route.fulfill({ body: 'aa' }));
+	await page.goto('/');
+	await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled();
+}
+
+test('ghost words score zero, preserve moves, replace tiles and reject repeats', async ({
+	page
+}) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await setupSpecial(page, [0, 0, 0, 0, 0, 0, 0, 0]);
+	await expect(tile(page, 0)).toHaveAttribute('data-type', 'ghost');
+	await expect(tile(page, 0).locator('.tile-face')).toHaveCSS(
+		'background-color',
+		'rgba(0, 0, 0, 0)'
+	);
+	await tile(page, 0).click();
+	await tile(page, 1).click();
+	await expect(page.locator('.free-word')).toHaveText('Ghost word · no move used');
+	await page.keyboard.press('Enter');
+	await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled();
+	await expect(page.getByTestId('total')).toHaveText('0');
+	await expect(page.getByRole('meter', { name: 'Moves remaining' })).toHaveAttribute(
+		'aria-valuenow',
+		'10'
+	);
+	await expect(tile(page, 0)).toHaveAttribute('data-type', 'normal');
+	await tile(page, 2).click();
+	await tile(page, 3).click();
+	await page.keyboard.press('Enter');
+	await expect(page.getByRole('status')).toHaveText('That word has already been played.');
+	await expect(page.getByRole('meter', { name: 'Moves remaining' })).toHaveAttribute(
+		'aria-valuenow',
+		'10'
+	);
+});
+
+test('double letters count twice and multiplier letters increase only the multiplier', async ({
+	page
+}) => {
+	await setupSpecial(page, [0, 0.1, 0, 0.2, 0.995]);
+	await expect(tile(page, 0)).toHaveAttribute('data-type', 'double');
+	await expect(tile(page, 1).locator('.letter-score')).toHaveText('×5');
+	await tile(page, 0).click();
+	await tile(page, 1).click();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('word-score')).toHaveText('1');
+	await expect(page.getByTestId('word-score')).toHaveText('2');
+	await expect(page.getByTestId('multiplier')).toHaveText('6×');
+	await expect(page.locator('.award-formula')).toHaveText('2 × 6');
+	await expect(page.getByTestId('total')).toHaveText('12');
+	await expect(page.getByRole('meter', { name: 'Moves remaining' })).toHaveAttribute(
+		'aria-valuenow',
+		'9'
+	);
 });

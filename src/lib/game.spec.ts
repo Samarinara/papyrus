@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
 	adjacent,
+	createTile,
+	createBoard,
+	type Tile,
+	moveCostFor,
+	wordMultiplierFor,
+	scoringSteps,
+	wordFor,
 	LETTER_DISTRIBUTION,
 	LetterDealer,
 	multiplierFor,
@@ -40,11 +47,11 @@ describe('letter dealer', () => {
 	});
 
 	it('balances replacements against letters that remain on the board', () => {
-		const board = Array<string>(16).fill('E');
+		const board: Tile[] = Array.from({ length: 16 }, () => ({ letter: 'E', type: 'normal' }));
 		const dealer = new LetterDealer(() => 0.999);
 		const next = replaceLetters(board, [0, 1, 2], dealer);
-		expect(next.slice(3)).toEqual(Array<string>(13).fill('E'));
-		expect(next.slice(0, 3).every((letter) => letter in LETTER_DISTRIBUTION)).toBe(true);
+		expect(next.slice(3)).toEqual(board.slice(3));
+		expect(next.slice(0, 3).every((letter) => letter.letter in LETTER_DISTRIBUTION)).toBe(true);
 	});
 });
 
@@ -71,7 +78,12 @@ describe('scoring and validation', () => {
 		expect([0, 1, 3, 4, 6, 7, 8, 9, 10, 16].map(multiplierFor)).toEqual([
 			1, 1, 1, 2, 2, 4, 4, 10, 10, 10
 		]);
-		expect(scoreFor(['Q', 'U', 'I', 'Z'], [0, 1, 2, 3])).toBe(22);
+		expect(
+			scoreFor(
+				['Q', 'U', 'I', 'Z'].map((letter) => ({ letter, type: 'normal' })),
+				[0, 1, 2, 3]
+			)
+		).toBe(22);
 	});
 	it('rejects short, unknown, and repeated words, case insensitively', () => {
 		const dictionary = new Set(['at', 'cat']);
@@ -79,5 +91,44 @@ describe('scoring and validation', () => {
 		expect(rejectionFor('ZZ', dictionary, new Set())).toBeTruthy();
 		expect(rejectionFor('CAT', dictionary, new Set(['cat']))).toBeTruthy();
 		expect(rejectionFor('AT', dictionary, new Set())).toBeNull();
+	});
+});
+
+describe('special letters', () => {
+	it('deals special types on initial boards and replacements', () => {
+		const board = createBoard(new LetterDealer(() => 0));
+		expect(board).toHaveLength(16);
+		expect(board.every((tile) => tile.type === 'ghost')).toBe(true);
+		const next = replaceLetters(board, [0], new LetterDealer(() => 0.1));
+		expect(next[0].type).toBe('double');
+		expect(next.slice(1)).toEqual(board.slice(1));
+	});
+
+	it('uses progressively rarer multiplier values', () => {
+		const counts = [0, 0, 0, 0, 0];
+		for (let i = 0; i < 100; i++) {
+			const draws = [0.2, (i + 0.5) / 100];
+			const tile = createTile('A', () => draws.shift()!);
+			if (tile.type === 'multiplier') counts[tile.multiplier - 1]++;
+		}
+		expect(counts).toEqual([60, 25, 10, 4, 1]);
+		expect(createTile('A', () => 0.5).type).toBe('normal');
+	});
+
+	it('counts doubles twice, ghosts as zero, and adds multiplier bonuses', () => {
+		const board: Tile[] = [
+			{ letter: 'Q', type: 'ghost' },
+			{ letter: 'U', type: 'double' },
+			{ letter: 'I', type: 'multiplier', multiplier: 2 },
+			{ letter: 'Z', type: 'multiplier', multiplier: 5 }
+		];
+		const path = [0, 1, 2, 3];
+		expect(wordFor(board, path)).toBe('QUIZ');
+		expect(scoreFor(board, path)).toBe(2);
+		expect(wordMultiplierFor(board, path)).toBe(9);
+		expect(scoringSteps(board, path).map((step) => step.points)).toEqual([0, 1, 1, 0, 0]);
+		expect(moveCostFor(board, path)).toBe(0);
+		expect(moveCostFor(board, [1, 2, 3])).toBe(1);
+		expect(scoreFor(board, [0, 2, 3])).toBe(0);
 	});
 });

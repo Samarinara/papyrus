@@ -7,7 +7,12 @@
 		createBoard,
 		HIGH_SCORE_KEY,
 		LetterDealer,
-		LETTER_SCORES,
+		type Tile,
+		tilePoints,
+		tileLabel,
+		scoringSteps,
+		wordMultiplierFor,
+		moveCostFor,
 		multiplierFor,
 		replaceLetters,
 		rejectionFor,
@@ -16,7 +21,7 @@
 		wordFor
 	} from '$lib/game';
 
-	let board = $state<string[]>([]);
+	let board = $state<Tile[]>([]);
 	let path = $state<number[]>([]);
 	let cursor = $state<number | null>(null);
 	let moves = $state(10);
@@ -31,6 +36,7 @@
 	let dealOrder = $state(Array.from({ length: 16 }, (_, index) => index));
 	let award = $state<{ id: number; points: number; base: number; multiplier: number } | null>(null);
 	let countedScore = $state(0);
+	let countedMultiplier = $state(1);
 	let scoringTile = $state<number | null>(null);
 	let scoreTick = $state(0);
 	let rejectionCount = $state(0);
@@ -50,7 +56,8 @@
 	let trackBarTimer: ReturnType<typeof setTimeout>;
 	let scoreSequence = 0;
 	const score = $derived(scoreFor(board, path));
-	const multiplier = $derived(multiplierFor(path.length));
+	const multiplier = $derived(scoring ? countedMultiplier : multiplierFor(path.length));
+	const freeWord = $derived(path.length > 0 && moveCostFor(board, path) === 0);
 	const word = $derived(wordFor(board, path));
 	const connections = $derived(path.slice(1).map((to, index) => ({ from: path[index], to })));
 
@@ -159,7 +166,9 @@
 		const replacements = replaceLetters(board, submittedPath, dealer);
 		const run = ++scoreSequence;
 		const baseScore = score;
-		const submittedMultiplier = multiplier;
+		const submittedMultiplier = wordMultiplierFor(board, submittedPath);
+		const moveCost = moveCostFor(board, submittedPath);
+		countedMultiplier = multiplierFor(submittedPath.length);
 		const awardId = (award?.id ?? 0) + 1;
 		// Give every letter a readable beat without making exceptionally long words drag.
 		const beat = submittedPath.length >= 9 ? 250 : 340;
@@ -169,11 +178,13 @@
 		message = '';
 		await pause(180);
 
-		for (const tileIndex of submittedPath) {
+		for (const step of scoringSteps(board, submittedPath)) {
+			const tileIndex = step.index;
 			if (run !== scoreSequence) return;
 			scoringTile = tileIndex;
 			countedTiles.add(tileIndex);
-			countedScore += LETTER_SCORES[board[tileIndex]];
+			countedScore += step.points;
+			countedMultiplier += step.multiplier;
 			scoreTick += 1;
 			await pause(beat);
 		}
@@ -198,8 +209,8 @@
 			(version, index) => version + Number(submittedPath.includes(index))
 		);
 		board = replacements;
-		moves -= 1;
-		pulseBar('moves');
+		moves -= moveCost;
+		if (moveCost) pulseBar('moves');
 		pulseBar('track');
 		if (total > highScore) {
 			highScore = total;
@@ -344,9 +355,12 @@
 					onpointermove={pointermove}
 					onlostpointercapture={endDrag}
 				>
-					{#each board as letter, index (index)}
+					{#each board as tile, index (index)}
 						<button
 							class="tile"
+							class:ghost={tile.type === 'ghost'}
+							class:double={tile.type === 'double'}
+							data-type={tile.type}
 							class:selected={path.includes(index)}
 							class:deselecting={deselecting.has(index)}
 							class:counting={scoringTile === index}
@@ -357,7 +371,7 @@
 							style:--tilt={`${(((index * 7) % 5) - 2) * 0.7}deg`}
 							style:--deal-delay={`${dealOrder[index] * 14}ms`}
 							data-tile={index}
-							aria-label={`${letter}, ${LETTER_SCORES[letter]} points, row ${Math.floor(index / 4) + 1}, column ${(index % 4) + 1}`}
+							aria-label={`${tileLabel(tile)}, row ${Math.floor(index / 4) + 1}, column ${(index % 4) + 1}`}
 							aria-pressed={path.includes(index)}
 							disabled={!ready || scoring}
 							onpointerdown={(event) => pointerdown(event, index)}
@@ -374,11 +388,17 @@
 						>
 							{#key tileVersions[index]}
 								<span class="tile-face">
-									<span class="letter">{letter}</span>
-									<span class="letter-score">{LETTER_SCORES[letter]}</span>
+									<span class="letter">{tile.letter}</span>
+									<span class="letter-score"
+										>{tile.type === 'multiplier' ? `×${tile.multiplier}` : tilePoints(tile)}</span
+									>
 									{#if scoringTile === index}
 										{#key scoreTick}
-											<span class="score-tick" aria-hidden="true">+{LETTER_SCORES[letter]}</span>
+											<span class="score-tick" aria-hidden="true"
+												>+{tile.type === 'multiplier'
+													? `${tile.multiplier}×`
+													: tilePoints(tile)}</span
+											>
 										{/key}
 									{/if}
 								</span>
@@ -406,6 +426,7 @@
 					disabled={!ready || scoring}
 					>{scoring ? 'Counting…' : ready ? 'Submit' : 'Loading…'}</button
 				>
+				<p class="free-word">{freeWord ? 'Ghost word · no move used' : ''}</p>
 			</div>
 
 			<div class:scoring class="scoreboard" aria-label="Scoreboard">
@@ -447,6 +468,9 @@
 			</div>
 		</div>
 
+		<p class="tile-guide">
+			Ghost: 0 points, free move · Double outline: scores twice · ×1–×5: adds to multiplier
+		</p>
 		<div class="feedback" role="status">
 			{#key rejectionCount}<p class:rejected={message !== ''}>{message}</p>{/key}
 		</div>

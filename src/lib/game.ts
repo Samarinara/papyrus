@@ -61,6 +61,33 @@ export const LETTER_DISTRIBUTION: Readonly<Record<string, number>> = {
 	Z: 1
 };
 
+export type Tile = { letter: string } & (
+	{ type: 'normal' | 'ghost' | 'double' } | { type: 'multiplier'; multiplier: 1 | 2 | 3 | 4 | 5 }
+);
+
+/** Special types are independent of the balanced letter pool. */
+export function createTile(letter: string, random: () => number = Math.random): Tile {
+	const roll = random();
+	if (roll < 0.06) return { letter, type: 'ghost' };
+	if (roll < 0.16) return { letter, type: 'double' };
+	if (roll < 0.26) {
+		// Conditional probabilities: 60%, 25%, 10%, 4%, 1%.
+		const value = random();
+		const multiplier = value < 0.6 ? 1 : value < 0.85 ? 2 : value < 0.95 ? 3 : value < 0.99 ? 4 : 5;
+		return { letter, type: 'multiplier', multiplier };
+	}
+	return { letter, type: 'normal' };
+}
+
+export const tilePoints = (tile: Tile) =>
+	tile.type === 'ghost' || tile.type === 'multiplier' ? 0 : LETTER_SCORES[tile.letter];
+export const tileLabel = (tile: Tile) => {
+	if (tile.type === 'ghost') return `${tile.letter}, ghost, 0 points, word costs no move`;
+	if (tile.type === 'double') return `${tile.letter}, double, ${tilePoints(tile)} points twice`;
+	if (tile.type === 'multiplier') return `${tile.letter}, adds ${tile.multiplier} to multiplier`;
+	return `${tile.letter}, ${tilePoints(tile)} points`;
+};
+
 const VOWELS = new Set(['A', 'E', 'I', 'O', 'U']);
 const duplicateWeight = (copies: number) => [1, 0.42, 0.12, 0.03][Math.min(copies, 3)];
 
@@ -74,6 +101,10 @@ export class LetterDealer {
 
 	private refill() {
 		this.remaining = { ...LETTER_DISTRIBUTION };
+	}
+
+	nextTile(board: readonly Tile[]): Tile {
+		return createTile(this.next(board.map((tile) => tile.letter)), this.random);
 	}
 
 	next(board: readonly string[]): string {
@@ -120,17 +151,17 @@ export class LetterDealer {
 }
 
 export const createBoard = (dealer = new LetterDealer()) => {
-	const board: string[] = [];
-	while (board.length < 16) board.push(dealer.next(board));
+	const board: Tile[] = [];
+	while (board.length < 16) board.push(dealer.nextTile(board));
 	return board;
 };
 
-export function replaceLetters(board: string[], indices: readonly number[], dealer: LetterDealer) {
+export function replaceLetters(board: Tile[], indices: readonly number[], dealer: LetterDealer) {
 	const replaced = new Set(indices);
 	const next = [...board];
 	const visible = board.filter((_, index) => !replaced.has(index));
 	for (const index of indices) {
-		const letter = dealer.next(visible);
+		const letter = dealer.nextTile(visible);
 		next[index] = letter;
 		visible.push(letter);
 	}
@@ -138,10 +169,26 @@ export function replaceLetters(board: string[], indices: readonly number[], deal
 }
 export const multiplierFor = (length: number) =>
 	length >= 9 ? 10 : length >= 7 ? 4 : length >= 4 ? 2 : 1;
-export const scoreFor = (board: string[], path: number[]) =>
-	path.reduce((score, index) => score + LETTER_SCORES[board[index]], 0);
-export const wordFor = (board: string[], path: number[]) =>
-	path.map((index) => board[index]).join('');
+export function scoringSteps(board: readonly Tile[], path: readonly number[]) {
+	return path.flatMap((index) => {
+		const tile = board[index];
+		const step = {
+			index,
+			points: tilePoints(tile),
+			multiplier: tile.type === 'multiplier' ? tile.multiplier : 0
+		};
+		return tile.type === 'double' ? [step, { ...step }] : [step];
+	});
+}
+export const scoreFor = (board: readonly Tile[], path: readonly number[]) =>
+	scoringSteps(board, path).reduce((score, step) => score + step.points, 0);
+export const wordMultiplierFor = (board: readonly Tile[], path: readonly number[]) =>
+	multiplierFor(path.length) +
+	scoringSteps(board, path).reduce((sum, step) => sum + step.multiplier, 0);
+export const moveCostFor = (board: readonly Tile[], path: readonly number[]) =>
+	path.some((index) => board[index].type === 'ghost') ? 0 : 1;
+export const wordFor = (board: readonly Tile[], path: readonly number[]) =>
+	path.map((index) => board[index].letter).join('');
 export function adjacent(a: number, b: number) {
 	return (
 		a !== b &&
