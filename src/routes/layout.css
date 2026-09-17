@@ -634,3 +634,29 @@ button:focus-visible {
 		opacity: 1;
 	}
 }
+
+/* Keep ghost faces clear through selection and counting. */
+.tile.ghost .tile-face {
+	background: transparent;
+	border: 1px dashed #929487;
+	box-shadow: none;
+}
+.tile.ghost.selected .tile-face {
+	border: 2px dashed #596749;
+}
+.tile.double .tile-face {
+	outline: 3px double #8e826b;
+	outline-offset: -6px;
+}
+.free-word {
+	min-height: 1em;
+	font-size: 12px;
+	color: #52683d;
+}
+.tile-guide {
+	text-align: center;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #6d6c61;
+	margin: 20px 0 0;
+}
