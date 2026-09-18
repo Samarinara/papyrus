@@ -653,10 +653,156 @@ button:focus-visible {
 	font-size: 12px;
 	color: #52683d;
 }
-.tile-guide {
-	text-align: center;
+
+/* Reserve the status line so changing validity never shifts the board. */
+.word-status {
+	min-height: 24px;
+	margin: 0 6px 8px;
+	text-align: right;
 	font-size: 12px;
-	line-height: 1.6;
+	font-weight: 700;
+	color: #8d3f35;
+}
+.word-status span {
+	display: inline-block;
+	animation: status-in 130ms ease-out;
+}
+.word-status .valid {
+	color: #52683d;
+}
+@keyframes status-in {
+	from {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+.board-actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 20px;
+}
+.board-actions .submit {
+	margin-top: 0;
+}
+.help-button,
+.help-close {
+	width: 44px;
+	min-height: 44px;
+	flex-shrink: 0;
+	border: 1px solid #cbc8bd;
+	border-radius: 50%;
+	background: transparent;
+	font-size: 20px;
+	font-weight: 700;
+}
+.help-button:hover,
+.help-close:hover {
+	background: #e9e7e0;
+}
+html {
+	scrollbar-gutter: stable;
+}
+body:has(.help-dialog[open]) {
+	overflow: hidden;
+}
+.help-dialog {
+	width: min(520px, calc(100% - 32px));
+	max-height: calc(100svh - 32px);
+	margin: auto;
+	padding: 24px;
+	border: 1px solid #d6d3c9;
+	border-radius: 14px;
+	background: #f7f6f2;
+	color: #302e29;
+	box-shadow: 0 24px 80px #302e2933;
+	overscroll-behavior: contain;
+	line-height: 1.55;
+}
+.help-dialog[open] {
+	animation: status-in 130ms ease-out;
+}
+.help-dialog::backdrop {
+	background: rgb(30 32 26 / 45%);
+}
+.help-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+.help-heading h1 {
+	margin: 0;
+	font-size: 24px;
+}
+.help-dialog h2 {
+	margin: 20px 0 6px;
+	font-size: 16px;
+}
+.help-dialog p {
+	margin: 12px 0;
+}
+.help-dialog ul {
+	padding-left: 20px;
+}
+.help-dialog li + li {
+	margin-top: 8px;
+}
+.help-keyboard {
+	font-size: 13px;
 	color: #6d6c61;
-	margin: 20px 0 0;
+}
+@media (max-width: 600px) {
+	.play-area {
+		grid-template-columns: minmax(0, 440px);
+		gap: 16px;
+		padding-top: 20px;
+	}
+	.scoreboard {
+		grid-row: 1;
+		margin-bottom: 0;
+		display: grid;
+		grid-template-columns: 2fr 1fr;
+		align-items: center;
+	}
+	.score-columns {
+		border-bottom: 0;
+		padding-bottom: 0;
+		font-size: 24px;
+	}
+	.total-stat {
+		border-left: 1px solid #cbc8bd;
+		min-width: 0;
+	}
+	.total-label {
+		padding-top: 0;
+	}
+	.total {
+		padding-top: 6px;
+		font-size: 28px;
+	}
+	.score-award {
+		top: 0;
+		left: auto;
+		right: 0;
+		width: 33.333%;
+		background: #f7f6f2;
+		border-radius: 4px;
+	}
+	.award-formula {
+		padding-top: 0;
+	}
+	.board-actions {
+		margin-top: 16px;
+	}
+	.feedback {
+		margin: 8px 0 16px;
+	}
+	.help-dialog {
+		padding: 20px;
+	}
 }
