@@ -32,6 +32,8 @@
 	let invalidTile = $state<number | null>(null);
 	let scoring = $state(false);
 	let grid = $state<HTMLDivElement>();
+	let helpDialog = $state<HTMLDialogElement>();
+	let helpOpen = $state(false);
 	let tileVersions = $state(Array<number>(16).fill(0));
 	let dealOrder = $state(Array.from({ length: 16 }, (_, index) => index));
 	let award = $state<{ id: number; points: number; base: number; multiplier: number } | null>(null);
@@ -59,6 +61,15 @@
 	const multiplier = $derived(scoring ? countedMultiplier : multiplierFor(path.length));
 	const freeWord = $derived(path.length > 0 && moveCostFor(board, path) === 0);
 	const word = $derived(wordFor(board, path));
+	const validWord = $derived(ready && word.length >= 2 && dictionary.has(word.toLowerCase()));
+	const wordStatus = $derived(
+		!ready || !word ? '' : validWord ? 'Valid Word' : 'Not In Dictionary'
+	);
+
+	function openHelp() {
+		helpDialog?.showModal();
+		helpOpen = true;
+	}
 	const connections = $derived(path.slice(1).map((to, index) => ({ from: path[index], to })));
 
 	function pulseBar(type: 'moves' | 'track') {
@@ -253,7 +264,16 @@
 	}
 
 	function keydown(event: KeyboardEvent) {
-		if (moves === 0 || !ready || scoring || event.altKey || event.ctrlKey || event.metaKey) return;
+		if (
+			helpOpen ||
+			moves === 0 ||
+			!ready ||
+			scoring ||
+			event.altKey ||
+			event.ctrlKey ||
+			event.metaKey
+		)
+			return;
 		if (
 			event.target instanceof HTMLButtonElement &&
 			!event.target.hasAttribute('data-tile') &&
@@ -347,6 +367,11 @@
 
 		<div class="play-area">
 			<div class="board-column">
+				<div class="word-status" aria-live="polite" aria-atomic="true">
+					{#key wordStatus}
+						<span class:valid={validWord}>{wordStatus}</span>
+					{/key}
+				</div>
 				<div
 					class="grid"
 					bind:this={grid}
@@ -419,13 +444,21 @@
 						{/each}
 					</svg>
 				</div>
-				<button
-					class="submit"
-					class:primed={path.length >= 2}
-					onclick={submit}
-					disabled={!ready || scoring}
-					>{scoring ? 'Counting…' : ready ? 'Submit' : 'Loading…'}</button
-				>
+				<div class="board-actions">
+					<button
+						class="submit"
+						class:primed={path.length >= 2}
+						onclick={submit}
+						disabled={!ready || scoring}
+						>{scoring ? 'Counting…' : ready ? 'Submit' : 'Loading…'}</button
+					>
+					<button
+						class="help-button"
+						aria-label="How to play"
+						aria-haspopup="dialog"
+						onclick={openHelp}>?</button
+					>
+				</div>
 				<p class="free-word">{freeWord ? 'Ghost word · no move used' : ''}</p>
 			</div>
 
@@ -453,9 +486,11 @@
 						>
 					</div>
 				</div>
-				<div class="total-label" aria-hidden="true">Total</div>
-				<div class="total" aria-label={`Game total: ${total}`} data-testid="total">
-					<AnimatedNumber value={total} label={`Game total: ${total}`} strong />
+				<div class="total-stat">
+					<div class="total-label" aria-hidden="true">Total</div>
+					<div class="total" aria-label={`Game total: ${total}`} data-testid="total">
+						<AnimatedNumber value={total} label={`Game total: ${total}`} strong />
+					</div>
 				</div>
 				{#if award}
 					{#key award.id}
@@ -468,9 +503,6 @@
 			</div>
 		</div>
 
-		<p class="tile-guide">
-			Ghost: 0 points, free move · Double outline: scores twice · ×1–×5: adds to multiplier
-		</p>
 		<div class="feedback" role="status">
 			{#key rejectionCount}<p class:rejected={message !== ''}>{message}</p>{/key}
 		</div>
@@ -512,3 +544,41 @@
 		</div>
 	{/if}
 </main>
+
+<dialog
+	class="help-dialog"
+	bind:this={helpDialog}
+	onclose={() => (helpOpen = false)}
+	aria-labelledby="help-title"
+>
+	<div class="help-heading">
+		<h1 id="help-title">How to play</h1>
+		<button class="help-close" aria-label="Close help" onclick={() => helpDialog?.close()}>×</button
+		>
+	</div>
+	<p>Make words, earn points, and beat your high score in ten moves.</p>
+	<h2>Connect letters</h2>
+	<p>
+		Tap or drag through neighboring tiles, including diagonals, to spell a word of at least two
+		letters. Tap a selected tile to remove it and the letters after it, then press Submit when
+		you’re ready. Each word can only be played once.
+	</p>
+	<h2>Build your score</h2>
+	<p>
+		Letter points are added together and multiplied by your word bonus: 2× for 4–6 letters, 4× for
+		7–8, and 10× for 9 or more. Used tiles are replaced after each accepted word.
+	</p>
+	<ul>
+		<li>
+			<strong>Ghost (dashed outline):</strong> scores no points and makes the entire word cost no move.
+		</li>
+		<li><strong>Double outline:</strong> counts that letter’s points twice.</li>
+		<li>
+			<strong>×1–×5 tiles:</strong> add to your word multiplier instead of scoring letter points.
+		</li>
+	</ul>
+	<p class="help-keyboard">
+		Keyboard: arrow keys move between tiles, Space selects, and Enter submits. Escape closes this
+		guide.
+	</p>
+</dialog>

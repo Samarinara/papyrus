@@ -296,3 +296,69 @@ test('double letters count twice and multiplier letters increase only the multip
 		'9'
 	);
 });
+
+test('help modal contains focus, blocks game keys and restores the trigger', async ({ page }) => {
+	await setup(page);
+	await tile(page, 0).click();
+	const help = page.getByRole('button', { name: 'How to play' });
+	await help.click();
+	const dialog = page.getByRole('dialog', { name: 'How to play' });
+	await expect(dialog).toBeVisible();
+	const close = dialog.getByRole('button', { name: 'Close help' });
+	await expect(close).toBeFocused();
+	await page.keyboard.press('Tab');
+	await page.keyboard.press('Tab');
+	await expect(close).toBeFocused();
+	await page.keyboard.press('ArrowRight');
+	await expect(close).toBeFocused();
+	await expect(page.getByRole('meter', { name: 'Selected letters' })).toHaveAttribute(
+		'aria-valuenow',
+		'1'
+	);
+	await page.keyboard.press('Escape');
+	await expect(dialog).not.toBeVisible();
+	await expect(help).toBeFocused();
+	await help.click();
+	await close.click();
+	await expect(dialog).not.toBeVisible();
+	await expect(help).toBeFocused();
+});
+
+test('word validity switches without moving the grid or looping animation', async ({ page }) => {
+	await setupSpecial(page, [0, 0.5, 0, 0.5]);
+	const status = page.locator('.word-status');
+	const grid = page.getByRole('group', { name: 'Letter grid' });
+	const initial = await grid.boundingBox();
+	await expect(status).toHaveText('');
+	await tile(page, 0).click();
+	await expect(status).toHaveText('Not In Dictionary');
+	await tile(page, 1).click();
+	await expect(status).toHaveText('Valid Word');
+	expect(await grid.boundingBox()).toEqual(initial);
+	expect(
+		await status.locator('span').evaluate((el) => getComputedStyle(el).animationIterationCount)
+	).toBe('1');
+	await tile(page, 1).click();
+	await expect(status).toHaveText('Not In Dictionary');
+	await tile(page, 0).click();
+	await expect(status).toHaveText('');
+});
+
+for (const width of [320, 375, 600, 1024]) {
+	test(`scoreboard layout at ${width}px`, async ({ page }) => {
+		await page.setViewportSize({ width, height: 740 });
+		await setup(page);
+		const scores = (await page.locator('.scoreboard').boundingBox())!;
+		const grid = (await page.getByRole('group', { name: 'Letter grid' }).boundingBox())!;
+		if (width <= 600) expect(scores.y + scores.height).toBeLessThan(grid.y);
+		else expect(scores.x).toBeGreaterThan(grid.x + grid.width);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+			true
+		);
+		await page.getByRole('button', { name: 'How to play' }).click();
+		const dialog = (await page.getByRole('dialog').boundingBox())!;
+		expect(dialog.x).toBeGreaterThanOrEqual(0);
+		expect(dialog.x + dialog.width).toBeLessThanOrEqual(width);
+		expect(dialog.height).toBeLessThanOrEqual(740);
+	});
+}
