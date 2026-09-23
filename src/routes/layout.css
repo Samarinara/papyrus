@@ -34,6 +34,20 @@ button:focus-visible {
 	max-width: 1200px;
 	margin: 0 auto;
 }
+.daily-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 16px;
+	margin-bottom: 14px;
+	color: #6d6c61;
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.daily-header strong {
+	color: #414a37;
+}
 .moves {
 	position: relative;
 	flex-shrink: 0;
@@ -223,6 +237,16 @@ button:focus-visible {
 }
 .high-score {
 	color: #6d6c61;
+}
+.daily-label,
+.tomorrow {
+	color: #7b786e;
+}
+.daily-label {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
 }
 .sr-only {
 	position: absolute;

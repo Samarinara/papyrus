@@ -5,8 +5,10 @@
 	import AnimatedNumber from '$lib/AnimatedNumber.svelte';
 	import {
 		createBoard,
-		HIGH_SCORE_KEY,
+		DAILY_GAMES_KEY,
+		dailyDateKey,
 		LetterDealer,
+		SeededRandom,
 		type Tile,
 		tilePoints,
 		tileLabel,
@@ -44,13 +46,15 @@
 	let rejectionCount = $state(0);
 	let movesBarScale = $state(1);
 	let trackBarScale = $state(1);
+	let puzzleDate = $state('');
 	let dictionary = new Set<string>();
 	let used = new SvelteSet<string>();
 	const countedTiles = new SvelteSet<number>();
 	const deselecting = new SvelteSet<number>();
 	const deselectDelays = new SvelteMap<number, number>();
 	const deselectTimers = new SvelteMap<number, ReturnType<typeof setTimeout>>();
-	let dealer = new LetterDealer();
+	let random = new SeededRandom('uninitialized');
+	let dealer = new LetterDealer(random.next);
 	let pointer: number | null = null;
 	let lastHit: number | null = null;
 	let errorTimer: ReturnType<typeof setTimeout>;
@@ -85,14 +89,103 @@
 		else trackBarTimer = nextTimer;
 	}
 
-	onMount(() => {
-		board = createBoard(dealer);
+	type DailyGame = {
+		board: Tile[];
+		path: number[];
+		moves: number;
+		total: number;
+		used: string[];
+		randomState: number;
+		remaining: Record<string, number>;
+		completed: boolean;
+	};
+	type DailyArchive = { version: 1; days: Record<string, DailyGame> };
+	let archive: DailyArchive = { version: 1, days: {} };
+
+	function isSavedGame(value: unknown): value is DailyGame {
+		if (!value || typeof value !== 'object') return false;
+		const game = value as Partial<DailyGame>;
+		return (
+			Array.isArray(game.board) &&
+			game.board.length === 16 &&
+			Array.isArray(game.path) &&
+			Number.isInteger(game.moves) &&
+			game.moves! >= 0 &&
+			game.moves! <= 10 &&
+			Number.isSafeInteger(game.total) &&
+			game.total! >= 0 &&
+			Array.isArray(game.used) &&
+			Number.isInteger(game.randomState) &&
+			!!game.remaining &&
+			typeof game.remaining === 'object'
+		);
+	}
+
+	function persistDaily(next: Partial<Pick<DailyGame, 'board' | 'path' | 'moves' | 'total'>> = {}) {
+		const savedBoard = next.board ?? board;
+		const savedPath = next.path ?? path;
+		const savedMoves = next.moves ?? moves;
+		const savedTotal = next.total ?? total;
+		if (!puzzleDate || savedBoard.length !== 16) return;
+		archive.days[puzzleDate] = {
+			board: savedBoard.map((tile) => ({ ...tile })),
+			path: [...savedPath],
+			moves: savedMoves,
+			total: savedTotal,
+			used: [...used],
+			randomState: random.state,
+			remaining: dealer.snapshot(),
+			completed: savedMoves === 0
+		};
 		try {
-			const stored = Number(localStorage.getItem(HIGH_SCORE_KEY));
-			if (Number.isSafeInteger(stored) && stored >= 0) highScore = stored;
+			localStorage.setItem(DAILY_GAMES_KEY, JSON.stringify(archive));
 		} catch {
-			/* Storage may be unavailable; the game still works. */
+			/* Storage may be unavailable; the current session still works. */
 		}
+	}
+
+	function initializeDaily() {
+		puzzleDate = dailyDateKey();
+		try {
+			const stored = JSON.parse(localStorage.getItem(DAILY_GAMES_KEY) ?? 'null') as unknown;
+			if (
+				stored &&
+				typeof stored === 'object' &&
+				(stored as DailyArchive).version === 1 &&
+				(stored as DailyArchive).days &&
+				typeof (stored as DailyArchive).days === 'object'
+			) {
+				archive = stored as DailyArchive;
+			}
+		} catch {
+			archive = { version: 1, days: {} };
+		}
+
+		const saved = archive.days[puzzleDate];
+		if (isSavedGame(saved)) {
+			random = new SeededRandom(saved.randomState);
+			dealer = new LetterDealer(random.next, saved.remaining);
+			board = saved.board.map((tile) => ({ ...tile }));
+			path = [...saved.path];
+			moves = saved.moves;
+			total = saved.total;
+			used = new SvelteSet(saved.used);
+		} else {
+			random = new SeededRandom(puzzleDate);
+			dealer = new LetterDealer(random.next);
+			board = createBoard(dealer);
+			persistDaily();
+		}
+		highScore = Math.max(
+			0,
+			...Object.values(archive.days)
+				.filter(isSavedGame)
+				.map((game) => game.total)
+		);
+	}
+
+	onMount(() => {
+		initializeDaily();
 		const controller = new AbortController();
 		fetch(`${base}/dictionary/words.txt`, { signal: controller.signal })
 			.then((response) => {
@@ -159,6 +252,7 @@
 		}
 		cascadeDeselect(path.filter((selectedIndex) => !next.includes(selectedIndex)));
 		path = next;
+		persistDaily();
 		pulseBar('track');
 		message = '';
 	}
@@ -179,6 +273,14 @@
 		const baseScore = score;
 		const submittedMultiplier = wordMultiplierFor(board, submittedPath);
 		const moveCost = moveCostFor(board, submittedPath);
+		// Commit the accepted move before its animation. Closing or reloading mid-count
+		// resumes after the move instead of allowing it to be replayed.
+		persistDaily({
+			board: replacements,
+			path: [],
+			moves: moves - moveCost,
+			total: total + baseScore * submittedMultiplier
+		});
 		countedMultiplier = multiplierFor(submittedPath.length);
 		const awardId = (award?.id ?? 0) + 1;
 		// Give every letter a readable beat without making exceptionally long words drag.
@@ -223,44 +325,11 @@
 		moves -= moveCost;
 		if (moveCost) pulseBar('moves');
 		pulseBar('track');
-		if (total > highScore) {
-			highScore = total;
-			try {
-				localStorage.setItem(HIGH_SCORE_KEY, String(highScore));
-			} catch {
-				/* Keep the session high score. */
-			}
-		}
+		if (total > highScore) highScore = total;
 		countedScore = 0;
 		countedTiles.clear();
 		scoring = false;
-	}
-
-	function restart() {
-		scoreSequence += 1;
-		award = null;
-		countedScore = 0;
-		scoringTile = null;
-		countedTiles.clear();
-		invalidTile = null;
-		clearTimeout(errorTimer);
-		dealOrder = Array.from({ length: 16 }, (_, index) => index);
-		tileVersions = tileVersions.map((version) => version + 1);
-		dealer = new LetterDealer();
-		board = createBoard(dealer);
-		path = [];
-		cursor = null;
-		moves = 10;
-		total = 0;
-		used = new SvelteSet();
-		for (const timer of deselectTimers.values()) clearTimeout(timer);
-		deselectTimers.clear();
-		deselectDelays.clear();
-		deselecting.clear();
-		message = '';
-		scoring = false;
-		pointer = null;
-		lastHit = null;
+		persistDaily();
 	}
 
 	function keydown(event: KeyboardEvent) {
@@ -337,16 +406,20 @@
 </script>
 
 <svelte:head>
-	<title>Papyrus</title>
+	<title>Papyrus Daily</title>
 	<meta
 		name="description"
-		content="A letter-linking word game. Ten moves to make your highest score."
+		content="A daily letter-linking word game. Ten moves to make your highest score."
 	/>
 </svelte:head>
 
 <svelte:window onkeydown={keydown} onpointerup={endDrag} onpointercancel={endDrag} />
 
 <main class="game" aria-label="Papyrus word game">
+	<header class="daily-header">
+		<strong>Papyrus Daily</strong>
+		<time datetime={puzzleDate}>{puzzleDate}</time>
+	</header>
 	{#if moves > 0}
 		<div
 			class="moves"
@@ -536,11 +609,12 @@
 		</div>
 	{:else}
 		<div class="end-screen" aria-label="Game over">
+			<p class="daily-label">{puzzleDate} · Daily complete</p>
 			<div class="final-score" aria-label={`Final score: ${total}`}>
 				<AnimatedNumber value={total} label={`Final score: ${total}`} strong />
 			</div>
 			<p class="high-score">High score: {highScore}</p>
-			<button class="submit" onclick={restart}>Restart</button>
+			<p class="tomorrow">Your next puzzle arrives tomorrow.</p>
 		</div>
 	{/if}
 </main>
@@ -556,7 +630,9 @@
 		<button class="help-close" aria-label="Close help" onclick={() => helpDialog?.close()}>×</button
 		>
 	</div>
-	<p>Make words, earn points, and beat your high score in ten moves.</p>
+	<p>
+		Make words, earn points, and beat your high score in ten moves. There is one puzzle per day.
+	</p>
 	<h2>Connect letters</h2>
 	<p>
 		Tap or drag through neighboring tiles, including diagonals, to spell a word of at least two

@@ -27,7 +27,36 @@ export const LETTER_SCORES: Record<string, number> = {
 	Z: 10
 };
 
-export const HIGH_SCORE_KEY = 'papyrus.highScore';
+export const DAILY_GAMES_KEY = 'papyrus.dailyGames.v1';
+
+/** The UTC date is the puzzle id, so the same day always means the same puzzle worldwide. */
+export const dailyDateKey = (date = new Date()) => date.toISOString().slice(0, 10);
+
+function hashSeed(value: string) {
+	let hash = 2166136261;
+	for (let index = 0; index < value.length; index += 1) {
+		hash ^= value.charCodeAt(index);
+		hash = Math.imul(hash, 16777619);
+	}
+	return hash >>> 0;
+}
+
+/** A small reproducible PRNG whose state can be persisted with an unfinished game. */
+export class SeededRandom {
+	state: number;
+
+	constructor(seed: string | number) {
+		this.state = typeof seed === 'string' ? hashSeed(`papyrus:${seed}`) : seed >>> 0;
+	}
+
+	next = () => {
+		this.state = (this.state + 0x6d2b79f5) >>> 0;
+		let value = this.state;
+		value = Math.imul(value ^ (value >>> 15), value | 1);
+		value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+		return ((value ^ (value >>> 14)) >>> 0) / 2 ** 32;
+	};
+}
 
 // Rounded English letter frequencies. Keeping at least one of every letter in the
 // pool prevents rare letters from disappearing indefinitely, while depletion
@@ -95,8 +124,16 @@ const duplicateWeight = (copies: number) => [1, 0.42, 0.12, 0.03][Math.min(copie
 export class LetterDealer {
 	private remaining: Record<string, number> = {};
 
-	constructor(private readonly random: () => number = Math.random) {
-		this.refill();
+	constructor(
+		private readonly random: () => number = Math.random,
+		remaining?: Readonly<Record<string, number>>
+	) {
+		if (remaining) this.remaining = { ...remaining };
+		else this.refill();
+	}
+
+	snapshot() {
+		return { ...this.remaining };
 	}
 
 	private refill() {

@@ -1,16 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function setup(page: Page) {
-	await page.addInitScript(() => {
-		let seed = 42;
-		let draw = 0;
-		Math.random = () => {
-			// Keep interaction regressions on ordinary tiles. Special types have dedicated cases.
-			if (draw++ % 2 === 1) return 0.5;
-			seed = (seed * 1664525 + 1013904223) >>> 0;
-			return seed / 2 ** 32;
-		};
-	});
+	await page.clock.setFixedTime(new Date('2026-09-22T12:00:00Z'));
 	await page.goto('/');
 	// The bundled dictionary can take longer to load on a busy development machine.
 	await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled({
@@ -28,47 +19,53 @@ async function play(page: Page, path: number[]) {
 
 async function findPlayablePath(
 	page: Page,
-	excluded: string[] = []
+	excluded: string[] = [],
+	paidOnly = false
 ): Promise<{ path: number[]; word: string }> {
-	return page.evaluate<{ path: number[]; word: string }, string[]>(async (played) => {
-		const dictionary = new Set(
-			(await (await fetch('/dictionary/words.txt')).text()).trim().split(/\r?\n/)
-		);
-		const letters = [...document.querySelectorAll<HTMLElement>('[data-tile]')].map(
-			(element) => element.querySelector<HTMLElement>('.letter')!.textContent!
-		);
-		const blocked = new Set(played);
-		const adjacent = (a: number, b: number) =>
-			a !== b &&
-			Math.abs((a % 4) - (b % 4)) <= 1 &&
-			Math.abs(Math.floor(a / 4) - Math.floor(b / 4)) <= 1;
-		let answer: { path: number[]; word: string } | null = null;
-		const visit = (path: number[], word: string) => {
-			if (answer || path.length > 7) return;
-			if (
-				path.length >= 2 &&
-				dictionary.has(word.toLowerCase()) &&
-				!blocked.has(word.toLowerCase())
-			) {
-				answer = { path, word: word.toLowerCase() };
-				return;
-			}
-			for (let next = 0; next < letters.length; next += 1) {
-				if (!path.includes(next) && adjacent(path[path.length - 1], next)) {
-					visit([...path, next], word + letters[next]);
+	return page.evaluate<{ path: number[]; word: string }, { played: string[]; paidOnly: boolean }>(
+		async ({ played, paidOnly }) => {
+			const dictionary = new Set(
+				(await (await fetch('/dictionary/words.txt')).text()).trim().split(/\r?\n/)
+			);
+			const tiles = [...document.querySelectorAll<HTMLElement>('[data-tile]')];
+			const letters = tiles.map(
+				(element) => element.querySelector<HTMLElement>('.letter')!.textContent!
+			);
+			const blocked = new Set(played);
+			const adjacent = (a: number, b: number) =>
+				a !== b &&
+				Math.abs((a % 4) - (b % 4)) <= 1 &&
+				Math.abs(Math.floor(a / 4) - Math.floor(b / 4)) <= 1;
+			let answer: { path: number[]; word: string } | null = null;
+			const visit = (path: number[], word: string) => {
+				if (answer || path.length > 7) return;
+				if (
+					path.length >= 2 &&
+					dictionary.has(word.toLowerCase()) &&
+					!blocked.has(word.toLowerCase()) &&
+					(!paidOnly || path.every((index) => tiles[index].dataset.type !== 'ghost'))
+				) {
+					answer = { path, word: word.toLowerCase() };
+					return;
 				}
+				for (let next = 0; next < letters.length; next += 1) {
+					if (!path.includes(next) && adjacent(path[path.length - 1], next)) {
+						visit([...path, next], word + letters[next]);
+					}
+				}
+			};
+			for (let start = 0; start < letters.length && !answer; start += 1) {
+				visit([start], letters[start]);
 			}
-		};
-		for (let start = 0; start < letters.length && !answer; start += 1) {
-			visit([start], letters[start]);
-		}
-		if (!answer) throw new Error('No playable word found on board');
-		return answer;
-	}, excluded);
+			if (!answer) throw new Error('No playable word found on board');
+			return answer;
+		},
+		{ played: excluded, paidOnly }
+	);
 }
 
-async function playAvailableWord(page: Page, used: string[] = []) {
-	const choice = await findPlayablePath(page, used);
+async function playAvailableWord(page: Page, used: string[] = [], paidOnly = false) {
+	const choice = await findPlayablePath(page, used, paidOnly);
 	await play(page, choice.path);
 	return choice;
 }
@@ -105,27 +102,78 @@ test('keyboard, adjacency errors, backtracking, invalid words and replacement', 
 	);
 });
 
-test('ten accepted words, final score, restart and stored high score', async ({ page }) => {
-	test.setTimeout(75_000);
+test('daily selection and accepted progress survive reloads', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await setup(page);
-	const used: string[] = [];
-	for (let move = 0; move < 10; move += 1) {
-		const choice = await playAvailableWord(page, used);
-		used.push(choice.word);
-	}
-	await expect(page.getByRole('button', { name: 'Restart' })).toBeVisible();
+	const opening = await page.locator('[data-tile]').evaluateAll((tiles) =>
+		tiles.map((tile) => ({
+			letter: tile.querySelector('.letter')!.textContent,
+			type: tile.getAttribute('data-type')
+		}))
+	);
+	await tile(page, 0).click();
+	await tile(page, 1).click();
+	await page.reload();
+	await expect(tile(page, 0)).toHaveAttribute('aria-pressed', 'true');
+	await expect(tile(page, 1)).toHaveAttribute('aria-pressed', 'true');
+	await expect(
+		page.locator('[data-tile]').evaluateAll((tiles) =>
+			tiles.map((tile) => ({
+				letter: tile.querySelector('.letter')!.textContent,
+				type: tile.getAttribute('data-type')
+			}))
+		)
+	).resolves.toEqual(opening);
+
+	await tile(page, 0).click();
+	await playAvailableWord(page);
+	const savedTotal = await page.getByTestId('total').textContent();
+	const savedMoves = await page
+		.getByRole('meter', { name: 'Moves remaining' })
+		.getAttribute('aria-valuenow');
+	await page.reload();
+	await expect(page.getByTestId('total')).toHaveText(savedTotal!);
+	await expect(page.getByRole('meter', { name: 'Moves remaining' })).toHaveAttribute(
+		'aria-valuenow',
+		savedMoves!
+	);
+});
+
+test('one completed daily attempt is stored and remains locked after reload', async ({ page }) => {
+	await setup(page);
+	await page.evaluate(() => {
+		const archive = JSON.parse(localStorage.getItem('papyrus.dailyGames.v1')!);
+		const today = new Date().toISOString().slice(0, 10);
+		archive.days[today].moves = 1;
+		archive.days['2026-09-21'] = {
+			...archive.days[today],
+			path: [],
+			moves: 0,
+			total: 1,
+			completed: true
+		};
+		localStorage.setItem('papyrus.dailyGames.v1', JSON.stringify(archive));
+	});
+	await page.reload();
+	await playAvailableWord(page, [], true);
+	await expect(page.getByText('Your next puzzle arrives tomorrow.')).toBeVisible();
 	const score = await page.locator('.final-score').textContent();
 	expect(Number(score)).toBeGreaterThan(0);
 	await expect(page.locator('.high-score')).toHaveText(`High score: ${score}`);
-	expect(await page.evaluate(() => localStorage.getItem('papyrus.highScore'))).toBe(score);
-	await page.getByRole('button', { name: 'Restart' }).click();
-	await expect(page.getByTestId('total')).toHaveText('0');
-	await expect(page.getByRole('meter', { name: 'Moves remaining' })).toHaveAttribute(
-		'aria-valuenow',
-		'10'
-	);
+	const stored = await page.evaluate(() => {
+		const archive = JSON.parse(localStorage.getItem('papyrus.dailyGames.v1')!);
+		return {
+			today: archive.days[new Date().toISOString().slice(0, 10)],
+			previous: archive.days['2026-09-21']
+		};
+	});
+	expect(stored.today.completed).toBe(true);
+	expect(stored.today.total).toBe(Number(score));
+	expect(stored.previous.total).toBe(1);
 	await page.reload();
-	expect(await page.evaluate(() => localStorage.getItem('papyrus.highScore'))).toBe(score);
+	await expect(page.getByText('Your next puzzle arrives tomorrow.')).toBeVisible();
+	await expect(page.locator('.final-score')).toHaveText(score!);
+	await expect(page.getByRole('button', { name: 'Restart' })).toHaveCount(0);
 });
 
 test('mouse dragging selects a connected word', async ({ page }) => {
@@ -237,10 +285,37 @@ test('submitted letters count into the word score one at a time', async ({ page 
 	await expect(page.getByTestId('total')).not.toHaveText('0');
 });
 
-async function setupSpecial(page: Page, draws: number[]) {
-	await page.addInitScript((values) => {
-		Math.random = () => values.shift() ?? 0.5;
-	}, draws);
+async function setupSpecial(
+	page: Page,
+	tiles: Array<
+		| { letter: string; type: 'normal' | 'ghost' | 'double' }
+		| { letter: string; type: 'multiplier'; multiplier: 1 | 2 | 3 | 4 | 5 }
+	>
+) {
+	await page.addInitScript((board) => {
+		const day = new Date().toISOString().slice(0, 10);
+		const remaining = Object.fromEntries(
+			'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((key) => [key, 4])
+		);
+		localStorage.setItem(
+			'papyrus.dailyGames.v1',
+			JSON.stringify({
+				version: 1,
+				days: {
+					[day]: {
+						board,
+						path: [],
+						moves: 10,
+						total: 0,
+						used: [],
+						randomState: 1,
+						remaining,
+						completed: false
+					}
+				}
+			})
+		);
+	}, tiles);
 	await page.route('**/dictionary/words.txt', (route) => route.fulfill({ body: 'aa' }));
 	await page.goto('/');
 	await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled();
@@ -250,7 +325,10 @@ test('ghost words score zero, preserve moves, replace tiles and reject repeats',
 	page
 }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
-	await setupSpecial(page, [0, 0, 0, 0, 0, 0, 0, 0]);
+	await setupSpecial(
+		page,
+		Array.from({ length: 16 }, () => ({ letter: 'A', type: 'ghost' as const }))
+	);
 	await expect(tile(page, 0)).toHaveAttribute('data-type', 'ghost');
 	await expect(tile(page, 0).locator('.tile-face')).toHaveCSS(
 		'background-color',
@@ -266,7 +344,7 @@ test('ghost words score zero, preserve moves, replace tiles and reject repeats',
 		'aria-valuenow',
 		'10'
 	);
-	await expect(tile(page, 0)).toHaveAttribute('data-type', 'normal');
+	await expect(tile(page, 0).locator('.letter')).not.toHaveText('A');
 	await tile(page, 2).click();
 	await tile(page, 3).click();
 	await page.keyboard.press('Enter');
@@ -280,7 +358,11 @@ test('ghost words score zero, preserve moves, replace tiles and reject repeats',
 test('double letters count twice and multiplier letters increase only the multiplier', async ({
 	page
 }) => {
-	await setupSpecial(page, [0, 0.1, 0, 0.2, 0.995]);
+	await setupSpecial(page, [
+		{ letter: 'A', type: 'double' },
+		{ letter: 'A', type: 'multiplier', multiplier: 5 },
+		...Array.from({ length: 14 }, () => ({ letter: 'A', type: 'normal' as const }))
+	]);
 	await expect(tile(page, 0)).toHaveAttribute('data-type', 'double');
 	await expect(tile(page, 1).locator('.letter-score')).toHaveText('×5');
 	await tile(page, 0).click();
@@ -325,7 +407,10 @@ test('help modal contains focus, blocks game keys and restores the trigger', asy
 });
 
 test('word validity switches without moving the grid or looping animation', async ({ page }) => {
-	await setupSpecial(page, [0, 0.5, 0, 0.5]);
+	await setupSpecial(
+		page,
+		Array.from({ length: 16 }, () => ({ letter: 'A', type: 'normal' as const }))
+	);
 	const status = page.locator('.word-status');
 	const grid = page.getByRole('group', { name: 'Letter grid' });
 	const initial = await grid.boundingBox();
