@@ -416,10 +416,6 @@
 <svelte:window onkeydown={keydown} onpointerup={endDrag} onpointercancel={endDrag} />
 
 <main class="game" aria-label="Papyrus word game">
-	<header class="daily-header">
-		<strong>Papyrus Daily</strong>
-		<time datetime={puzzleDate}>{puzzleDate}</time>
-	</header>
 	{#if moves > 0}
 		<div
 			class="moves"
@@ -437,6 +433,10 @@
 			></div>
 			<span class="moves-count"><AnimatedNumber value={moves} /></span>
 		</div>
+		<header class="daily-header">
+			<strong>Papyrus Daily</strong>
+			<time datetime={puzzleDate}>{puzzleDate}</time>
+		</header>
 
 		<div class="play-area">
 			<div class="board-column">
