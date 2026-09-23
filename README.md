@@ -1,6 +1,6 @@
 # Papyrus
 
-A minimal Svelte word game: link adjacent letters, submit English words, and score as much as possible in ten moves.
+A minimal daily Svelte word game: link adjacent letters, submit English words, and score as much as possible in ten moves.
 
 ## Development
 
@@ -21,7 +21,9 @@ npm run dev
 - Double letters have double outlines and count their printed points twice during scoring.
 - Multiplier letters show ×1–×5 instead of points. They add that value to the word-length multiplier and contribute no base points; multiple bonuses add together.
 - Each new tile has a 6% ghost, 10% double, 10% multiplier, and 74% ordinary chance. Multiplier values have respective chances of 60%, 25%, 10%, 4%, and 1%.
-- After ten moves have been spent, the final score and restart button appear. The high score persists in localStorage when available.
+- The UTC date deterministically seeds the board and every replacement, so everyone receives the same puzzle that day.
+- Progress is restored from localStorage after a reload. After ten moves have been spent, that day's attempt is complete and cannot be restarted.
+- Each dated game remains in localStorage with its score, and the high score is calculated across that history.
 
 The English dictionary is bundled locally. Source and license: [static/dictionary](static/dictionary/README.md).
 

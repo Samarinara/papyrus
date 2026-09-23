@@ -3,6 +3,7 @@ import {
 	adjacent,
 	createTile,
 	createBoard,
+	dailyDateKey,
 	type Tile,
 	moveCostFor,
 	wordMultiplierFor,
@@ -10,6 +11,7 @@ import {
 	wordFor,
 	LETTER_DISTRIBUTION,
 	LetterDealer,
+	SeededRandom,
 	multiplierFor,
 	rejectionFor,
 	replaceLetters,
@@ -25,6 +27,26 @@ function seededRandom(seed: number) {
 }
 
 describe('letter dealer', () => {
+	it('reproduces the full daily deal and can resume from saved random and pool state', () => {
+		const firstRandom = new SeededRandom('2026-09-22');
+		const firstDealer = new LetterDealer(firstRandom.next);
+		const opening = createBoard(firstDealer);
+		const randomState = firstRandom.state;
+		const remaining = firstDealer.snapshot();
+		const replacements = replaceLetters(opening, [0, 5, 10], firstDealer);
+
+		const matchingRandom = new SeededRandom('2026-09-22');
+		expect(createBoard(new LetterDealer(matchingRandom.next))).toEqual(opening);
+
+		const resumedRandom = new SeededRandom(randomState);
+		const resumedDealer = new LetterDealer(resumedRandom.next, remaining);
+		expect(replaceLetters(opening, [0, 5, 10], resumedDealer)).toEqual(replacements);
+	});
+
+	it('uses an ISO UTC date as the daily puzzle id', () => {
+		expect(dailyDateKey(new Date('2026-09-22T23:59:59-06:00'))).toBe('2026-09-23');
+	});
+
 	it('depletes a human-frequency pool before refilling', () => {
 		const dealer = new LetterDealer(seededRandom(12));
 		const poolSize = Object.values(LETTER_DISTRIBUTION).reduce((sum, count) => sum + count, 0);
