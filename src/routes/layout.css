@@ -10,6 +10,11 @@
 * {
 	box-sizing: border-box;
 }
+html,
+body {
+	height: 100%;
+	overflow: hidden;
+}
 body {
 	margin: 0;
 	min-width: 320px;
@@ -27,19 +32,21 @@ button:focus-visible {
 	outline-offset: 5px;
 }
 .game {
-	min-height: 100svh;
+	height: 100svh;
+	min-height: 0;
 	display: flex;
 	flex-direction: column;
 	padding: 28px clamp(16px, 5vw, 72px);
 	max-width: 1200px;
 	margin: 0 auto;
+	overflow: hidden;
 }
 .daily-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
 	gap: 16px;
-	margin-bottom: 14px;
+	margin-top: 8px;
 	color: #6d6c61;
 	font-size: 12px;
 	letter-spacing: 0.08em;
@@ -71,12 +78,14 @@ button:focus-visible {
 }
 .play-area {
 	display: grid;
-	grid-template-columns: minmax(0, 440px) minmax(120px, 220px);
+	grid-template-columns: minmax(0, min(440px, calc(100svh - 330px))) minmax(120px, 220px);
 	gap: clamp(24px, 6vw, 80px);
 	align-items: center;
 	justify-content: center;
-	margin: auto 0;
-	padding-top: 40px;
+	flex: 1 1 auto;
+	min-height: 0;
+	margin: 0;
+	padding-top: 12px;
 }
 .board-column {
 	min-width: 0;
@@ -195,8 +204,8 @@ button:focus-visible {
 	overflow-wrap: anywhere;
 }
 .feedback {
-	min-height: 24px;
-	margin: 24px 0;
+	min-height: 20px;
+	margin: 6px 0;
 	text-align: center;
 	font-size: 14px;
 	color: #8d3f35;
@@ -274,11 +283,6 @@ button:focus-visible {
 @media (max-width: 600px) {
 	.game {
 		padding: 16px;
-	}
-	.play-area {
-		grid-template-columns: minmax(0, 1fr) 90px;
-		gap: 20px;
-		padding-top: 32px;
 	}
 	.grid {
 		gap: 0;
@@ -674,6 +678,7 @@ button:focus-visible {
 }
 .free-word {
 	min-height: 1em;
+	margin: 6px 0 0;
 	font-size: 12px;
 	color: #52683d;
 }
@@ -731,9 +736,6 @@ button:focus-visible {
 html {
 	scrollbar-gutter: stable;
 }
-body:has(.help-dialog[open]) {
-	overflow: hidden;
-}
 .help-dialog {
 	width: min(520px, calc(100% - 32px));
 	max-height: calc(100svh - 32px);
@@ -745,6 +747,7 @@ body:has(.help-dialog[open]) {
 	color: #302e29;
 	box-shadow: 0 24px 80px #302e2933;
 	overscroll-behavior: contain;
+	overflow: auto;
 	line-height: 1.55;
 }
 .help-dialog[open] {
@@ -782,9 +785,9 @@ body:has(.help-dialog[open]) {
 }
 @media (max-width: 600px) {
 	.play-area {
-		grid-template-columns: minmax(0, 440px);
-		gap: 16px;
-		padding-top: 20px;
+		grid-template-columns: minmax(0, min(calc(100vw - 32px), calc(100svh - 350px), 440px));
+		gap: 8px;
+		padding-top: 6px;
 	}
 	.scoreboard {
 		grid-row: 1;
@@ -821,10 +824,10 @@ body:has(.help-dialog[open]) {
 		padding-top: 0;
 	}
 	.board-actions {
-		margin-top: 16px;
+		margin-top: 8px;
 	}
 	.feedback {
-		margin: 8px 0 16px;
+		margin: 4px 0 8px;
 	}
 	.help-dialog {
 		padding: 20px;

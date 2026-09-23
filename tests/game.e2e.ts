@@ -215,6 +215,13 @@ test('touch dragging and small-screen layout', async ({ browser }) => {
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
 		true
 	);
+	expect(
+		await page.evaluate(
+			() =>
+				document.documentElement.scrollHeight <= innerHeight &&
+				document.querySelector('main')!.getBoundingClientRect().bottom <= innerHeight
+		)
+	).toBe(true);
 	await context.close();
 });
 
@@ -435,11 +442,21 @@ for (const width of [320, 375, 600, 1024]) {
 		await setup(page);
 		const scores = (await page.locator('.scoreboard').boundingBox())!;
 		const grid = (await page.getByRole('group', { name: 'Letter grid' }).boundingBox())!;
+		const moves = (await page.getByRole('meter', { name: 'Moves remaining' }).boundingBox())!;
+		const dailyHeader = (await page.locator('.daily-header').boundingBox())!;
 		if (width <= 600) expect(scores.y + scores.height).toBeLessThan(grid.y);
 		else expect(scores.x).toBeGreaterThan(grid.x + grid.width);
+		expect(dailyHeader.y).toBeGreaterThanOrEqual(moves.y + moves.height);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
 			true
 		);
+		expect(
+			await page.evaluate(
+				() =>
+					document.documentElement.scrollHeight <= innerHeight &&
+					document.querySelector('main')!.getBoundingClientRect().bottom <= innerHeight
+			)
+		).toBe(true);
 		await page.getByRole('button', { name: 'How to play' }).click();
 		const dialog = (await page.getByRole('dialog').boundingBox())!;
 		expect(dialog.x).toBeGreaterThanOrEqual(0);
